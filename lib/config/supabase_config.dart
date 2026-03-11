@@ -1,11 +1,9 @@
 /// Supabase configuration
-/// TODO: Replace with actual Supabase project URL and anon key after project creation
 class SupabaseConfig {
   SupabaseConfig._();
 
-  // TODO: Replace with actual Supabase URL
-  static const String supabaseUrl = 'https://your-project.supabase.co';
+  static const String supabaseUrl = 'https://brilcoktloprynjbqdis.supabase.co';
 
-  // TODO: Replace with actual Supabase anon key
-  static const String supabaseAnonKey = 'your-anon-key';
+  static const String supabaseAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJyaWxjb2t0bG9wcnluamJxZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNzg4NDUsImV4cCI6MjA4ODc1NDg0NX0.CXwZe0th9ln30nuFwx5Dop8arcSzYHT06KYXWBaOnDw';
 }
