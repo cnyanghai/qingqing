@@ -1,0 +1,76 @@
+import '../models/badge.dart';
+import 'supabase_service.dart';
+
+/// Service for checking and awarding badges after check-in
+class BadgeService {
+  final SupabaseService _supabaseService;
+
+  BadgeService(this._supabaseService);
+
+  /// Check all badge conditions and award any earned badges.
+  /// Returns list of newly earned badge keys.
+  Future<List<String>> checkAndAwardBadges(
+    String studentId, {
+    required int currentStreak,
+    required int totalCheckins,
+    String? note,
+  }) async {
+    final newBadges = <String>[];
+    try {
+      final existingBadges = await _supabaseService.getBadges(studentId);
+      final earnedKeys = existingBadges.map((b) => b.badgeKey).toSet();
+
+      // first_checkin: first ever check-in
+      if (!earnedKeys.contains('first_checkin') && totalCheckins >= 1) {
+        final badge =
+            await _supabaseService.awardBadge(studentId, 'first_checkin');
+        if (badge != null) newBadges.add('first_checkin');
+      }
+
+      // streak_7: 7 consecutive days
+      if (!earnedKeys.contains('streak_7') && currentStreak >= 7) {
+        final badge =
+            await _supabaseService.awardBadge(studentId, 'streak_7');
+        if (badge != null) newBadges.add('streak_7');
+      }
+
+      // streak_30: 30 consecutive days
+      if (!earnedKeys.contains('streak_30') && currentStreak >= 30) {
+        final badge =
+            await _supabaseService.awardBadge(studentId, 'streak_30');
+        if (badge != null) newBadges.add('streak_30');
+      }
+
+      // explorer: all 4 quadrants recorded
+      if (!earnedKeys.contains('explorer')) {
+        final quadrants =
+            await _supabaseService.getDistinctQuadrants(studentId);
+        if (quadrants.length >= 4) {
+          final badge =
+              await _supabaseService.awardBadge(studentId, 'explorer');
+          if (badge != null) newBadges.add('explorer');
+        }
+      }
+
+      // writer: 10 or more notes written
+      if (!earnedKeys.contains('writer')) {
+        final noteCount =
+            await _supabaseService.countCheckinNotes(studentId);
+        if (noteCount >= 10) {
+          final badge =
+              await _supabaseService.awardBadge(studentId, 'writer');
+          if (badge != null) newBadges.add('writer');
+        }
+      }
+    } catch (e) {
+      // Badge awarding is non-critical — swallow errors
+    }
+
+    return newBadges;
+  }
+
+  /// Get badge display info
+  BadgeInfo? getBadgeInfo(String badgeKey) {
+    return Badge.allBadges[badgeKey];
+  }
+}
