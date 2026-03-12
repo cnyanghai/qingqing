@@ -120,6 +120,18 @@ class WelcomeScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: AppSpacing.md),
+                // Login link for existing accounts
+                GestureDetector(
+                  onTap: () => context.go('/login'),
+                  child: const Text(
+                    '已有账号？点击登录',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
                 const Spacer(),
                 // Bottom tagline
                 const Text(

@@ -12,6 +12,7 @@ import '../screens/student/checkin_flow_screen.dart';
 import '../screens/student/calendar_screen.dart';
 import '../screens/student/profile_screen.dart';
 import '../screens/teacher/teacher_shell.dart';
+import '../screens/login_screen.dart';
 import '../screens/teacher/register_screen.dart';
 import '../screens/teacher/dashboard_screen.dart';
 import '../screens/teacher/student_list_screen.dart';
@@ -50,6 +51,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           return '/home'; // student or default
         },
         builder: (context, state) => const WelcomeScreen(),
+      ),
+
+      // Login (universal for teachers and students)
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
       ),
 
       // S2: Join class
