@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme.dart';
 import '../../models/checkin.dart';
+import '../../models/emotion.dart';
 import '../../providers/checkin_provider.dart';
 import '../../widgets/mood_calendar.dart';
 
@@ -15,7 +16,6 @@ class CalendarScreen extends ConsumerStatefulWidget {
 
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   late DateTime _currentMonth;
-  Checkin? _selectedDayCheckin;
 
   @override
   void initState() {
@@ -27,7 +27,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     setState(() {
       _currentMonth =
           DateTime(_currentMonth.year, _currentMonth.month - 1);
-      _selectedDayCheckin = null;
     });
   }
 
@@ -35,7 +34,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     setState(() {
       _currentMonth =
           DateTime(_currentMonth.year, _currentMonth.month + 1);
-      _selectedDayCheckin = null;
     });
   }
 
@@ -142,10 +140,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                           ),
                         ),
                         const Spacer(),
-                        _legendDot(AppColors.moodRed, '低落'),
-                        _legendDot(AppColors.moodYellow, ''),
-                        _legendDot(AppColors.moodBlue, ''),
-                        _legendDot(AppColors.moodGreen, '优秀'),
+                        _legendDot(AppColors.moodRed, '高能量·不舒服'),
+                        _legendDot(AppColors.moodYellow, '高能量·舒服'),
+                        _legendDot(AppColors.moodGreen, '低能量·舒服'),
+                        _legendDot(AppColors.moodBlue, '低能量·不舒服'),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -158,19 +156,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                         month: _currentMonth,
                         checkins: checkins,
                         onDayTap: (checkin) {
-                          setState(
-                              () => _selectedDayCheckin = checkin);
+                          _showCheckinDetail(checkin);
                         },
                       ),
                     ),
                   ],
                 ),
               ),
-              // Selected day detail popup
-              if (_selectedDayCheckin != null) ...[
-                const SizedBox(height: AppSpacing.md),
-                CheckinDetailPopup(checkin: _selectedDayCheckin!),
-              ],
+              // Selected day detail is shown via bottom sheet (see onDayTap)
               const SizedBox(height: AppSpacing.lg),
               // Monthly distribution
               checkinsAsync.when(
@@ -186,6 +179,131 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showCheckinDetail(Checkin checkin) {
+    final emotion = EmotionData.findEmotionByLabel(checkin.emotionLabel);
+    final contextOption = EmotionData.contextOptions
+        .where((c) => c.key == checkin.contextTag)
+        .toList();
+    final contextLabel = contextOption.isNotEmpty
+        ? contextOption.first.label
+        : checkin.contextTag;
+    final contextIcon = contextOption.isNotEmpty
+        ? contextOption.first.icon
+        : '';
+    final quadrantColor = AppColors.quadrantColor(checkin.quadrant);
+
+    // Weekday names
+    const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    final weekday = weekdays[checkin.checkedAt.weekday - 1];
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xLarge)),
+      ),
+      backgroundColor: AppColors.white,
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header: date + weekday + close button
+              Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: quadrantColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    '${checkin.checkedAt.year}年${checkin.checkedAt.month}月${checkin.checkedAt.day}日 $weekday',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Emotion emoji + label
+              Text(
+                '${emotion?.emoji ?? ""} ${checkin.emotionLabel}',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Context tag (icon + text)
+              Row(
+                children: [
+                  if (contextIcon.isNotEmpty)
+                    Text(contextIcon, style: const TextStyle(fontSize: 16)),
+                  if (contextIcon.isNotEmpty)
+                    const SizedBox(width: AppSpacing.xs),
+                  Text(
+                    '场景: $contextLabel',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              // Note (if any)
+              if (checkin.note != null && checkin.note!.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBackground,
+                    borderRadius: BorderRadius.circular(AppRadius.medium),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '备注',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        checkin.note!,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+            ],
+          ),
+        );
+      },
     );
   }
 

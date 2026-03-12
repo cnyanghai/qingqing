@@ -65,12 +65,7 @@ class ProfileScreen extends ConsumerWidget {
                             horizontal: AppSpacing.md),
                         child: Row(
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back,
-                                  color: AppColors.white),
-                              onPressed: () =>
-                                  context.go('/home'),
-                            ),
+                            const SizedBox(width: 48), // Balance the settings button
                             const Expanded(
                               child: Text(
                                 '个人资料',
@@ -234,7 +229,14 @@ class ProfileScreen extends ConsumerWidget {
                         icon: Icons.person_outline,
                         title: '账号详情',
                         subtitle: '管理您的个人信息',
-                        onTap: () {},
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('功能开发中'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
                       ),
                       _settingsTile(
                         icon: Icons.notifications_outlined,
@@ -381,6 +383,10 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Future<void> _handleLogout(BuildContext context, WidgetRef ref) async {
+    // Capture service reference before any async gaps to avoid
+    // ref lifecycle issues in ConsumerWidget
+    final service = ref.read(supabaseServiceProvider);
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -404,7 +410,6 @@ class ProfileScreen extends ConsumerWidget {
 
     if (confirmed == true) {
       try {
-        final service = ref.read(supabaseServiceProvider);
         await service.signOut();
         if (context.mounted) {
           context.go('/');

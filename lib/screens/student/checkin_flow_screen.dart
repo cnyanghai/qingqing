@@ -169,6 +169,43 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
             ],
           ),
         ),
+        // Progress bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '1/3',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const Text(
+                    '进行中',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: 1 / 3,
+                  backgroundColor: AppColors.divider,
+                  color: AppColors.moodGreen,
+                  minHeight: 6,
+                ),
+              ),
+            ],
+          ),
+        ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -207,43 +244,21 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
             ),
           ),
         ),
-        // Bottom: page indicator + continue button
+        // Bottom: continue button
         Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            children: [
-              // Page indicator dots
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(3, (index) {
-                  return Container(
-                    width: index == 0 ? 24 : 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: BoxDecoration(
-                      color: index == 0
-                          ? AppColors.primary
-                          : AppColors.divider,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  );
-                }),
+          child: SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _selectedQuadrant != null ? _nextPage : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                disabledBackgroundColor:
+                    AppColors.primary.withOpacity(0.5),
               ),
-              const SizedBox(height: AppSpacing.md),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _selectedQuadrant != null ? _nextPage : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    disabledBackgroundColor:
-                        AppColors.primary.withOpacity(0.5),
-                  ),
-                  child: const Text('继续'),
-                ),
-              ),
-            ],
+              child: const Text('继续'),
+            ),
           ),
         ),
       ],
@@ -293,7 +308,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    '步骤 2/4',
+                    '2/3',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
@@ -312,7 +327,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: 0.5,
+                  value: 2 / 3,
                   backgroundColor: AppColors.divider,
                   color: AppColors.moodGreen,
                   minHeight: 6,
@@ -436,14 +451,14 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    '记录进度',
+                    '3/3',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
                     ),
                   ),
                   const Text(
-                    '3/5',
+                    '进行中',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.primary,
@@ -455,7 +470,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: 0.6,
+                  value: 1.0,
                   backgroundColor: AppColors.divider,
                   color: AppColors.moodGreen,
                   minHeight: 6,

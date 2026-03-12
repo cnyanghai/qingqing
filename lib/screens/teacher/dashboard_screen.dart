@@ -61,7 +61,7 @@ class DashboardScreen extends ConsumerWidget {
                   if (todayCheckins.isEmpty)
                     _buildEmptyState()
                   else ...[
-                    _buildPieChartCard(todayCheckins, students.length),
+                    _buildPieChartCard(todayCheckins),
                     const SizedBox(height: AppSpacing.md),
 
                     // Alert card
@@ -194,7 +194,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPieChartCard(List<Checkin> todayCheckins, int totalStudents) {
+  Widget _buildPieChartCard(List<Checkin> todayCheckins) {
     // Count by quadrant
     final counts = <String, int>{
       'yellow': 0,
@@ -207,7 +207,6 @@ class DashboardScreen extends ConsumerWidget {
     }
 
     final total = todayCheckins.length;
-    final displayTotal = max(total, totalStudents);
 
     // Calculate percentages
     String pct(int count) {
@@ -219,10 +218,10 @@ class DashboardScreen extends ConsumerWidget {
     final legendItems = <_LegendItem>[];
 
     final quadrantInfo = [
-      ('yellow', '积极', AppColors.moodYellow, counts['yellow'] ?? 0),
-      ('green', '平静', AppColors.moodGreen, counts['green'] ?? 0),
-      ('red', '焦虑', AppColors.moodRed, counts['red'] ?? 0),
-      ('blue', '低落', AppColors.moodBlue, counts['blue'] ?? 0),
+      ('yellow', '高能量·舒服', AppColors.moodYellow, counts['yellow'] ?? 0),
+      ('green', '低能量·舒服', AppColors.moodGreen, counts['green'] ?? 0),
+      ('red', '高能量·不舒服', AppColors.moodRed, counts['red'] ?? 0),
+      ('blue', '低能量·不舒服', AppColors.moodBlue, counts['blue'] ?? 0),
     ];
 
     for (final info in quadrantInfo) {
@@ -286,7 +285,7 @@ class DashboardScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '$displayTotal',
+                      '$total',
                       style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -294,7 +293,7 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                     ),
                     const Text(
-                      '总人数',
+                      '总签到',
                       style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,

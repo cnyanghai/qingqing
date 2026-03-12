@@ -222,12 +222,23 @@ class HomeScreen extends ConsumerWidget {
               ),
               GestureDetector(
                 onTap: () => context.go('/calendar'),
-                child: const Text(
-                  '查看详情',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.primary,
-                  ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '查看详情',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    SizedBox(width: 2),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                  ],
                 ),
               ),
             ],

@@ -158,16 +158,16 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
   }
 
   Widget _buildLineChart(List<Checkin> checkins) {
-    // Map quadrant to Y value: blue=1, green=2, yellow=3, red=4
+    // Map quadrant to Y value: red=1, blue=2, green=3, yellow=4
     int quadrantToY(String q) {
       switch (q) {
-        case 'blue':
-          return 1;
-        case 'green':
-          return 2;
-        case 'yellow':
-          return 3;
         case 'red':
+          return 1;
+        case 'blue':
+          return 2;
+        case 'green':
+          return 3;
+        case 'yellow':
           return 4;
         default:
           return 2;
@@ -279,17 +279,17 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                   Color color;
                   switch (value.toInt()) {
                     case 1:
-                      label = '不太好';
-                      color = AppColors.moodBlue;
-                    case 2:
-                      label = '平静';
-                      color = AppColors.moodGreen;
-                    case 3:
-                      label = '开心';
-                      color = AppColors.moodYellow;
-                    case 4:
                       label = '有点烦';
                       color = AppColors.moodRed;
+                    case 2:
+                      label = '不太好';
+                      color = AppColors.moodBlue;
+                    case 3:
+                      label = '平静';
+                      color = AppColors.moodGreen;
+                    case 4:
+                      label = '开心';
+                      color = AppColors.moodYellow;
                     default:
                       return const SizedBox.shrink();
                   }

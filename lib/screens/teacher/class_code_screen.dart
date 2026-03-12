@@ -17,8 +17,7 @@ class ClassCodeScreen extends StatelessWidget {
     return classCode;
   }
 
-  // TODO: Replace with actual app URL after deployment
-  String get _qrContent => 'https://qingqing.app/join?code=$classCode';
+  String get _qrContent => 'https://cnyanghai.github.io/qingqing/';
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +149,7 @@ class ClassCodeScreen extends StatelessWidget {
                     ),
                     SizedBox(height: AppSpacing.sm),
                     Text(
-                      '1. 学生打开晴晴App\n2. 点击"我是学生"\n3. 输入以上6位班级码\n4. 设置昵称和头像即可开始',
+                      '1. 扫描二维码打开晴晴App（或手动访问网址）\n2. 点击"我是学生"\n3. 输入以上6位班级码\n4. 设置昵称和头像即可开始',
                       style: TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,

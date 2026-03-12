@@ -194,10 +194,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               TextField(
                 controller: _schoolController,
                 decoration: const InputDecoration(
-                  hintText: '搜索学校名称',
+                  hintText: '输入学校名称',
                 ),
                 onChanged: (_) => setState(() {}),
-                // TODO: Implement school search with debounce
               ),
               const SizedBox(height: AppSpacing.md),
               // Grade selection

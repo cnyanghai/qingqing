@@ -17,6 +17,7 @@ import '../screens/teacher/dashboard_screen.dart';
 import '../screens/teacher/student_list_screen.dart';
 import '../screens/teacher/student_detail_screen.dart';
 import '../screens/teacher/class_code_screen.dart';
+import '../screens/teacher/settings_screen.dart';
 
 /// Global navigation key
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -37,6 +38,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           if (userId == null) return null; // not logged in, show welcome
 
           final profileAsync = ref.read(profileProvider);
+
+          // If profile is still loading, don't redirect — let it re-evaluate
+          // once loading completes (Riverpod will trigger router refresh)
+          if (profileAsync.isLoading) return null;
+
           final profile = profileAsync.valueOrNull;
           if (profile == null) return null; // no profile yet, show welcome
 
@@ -167,19 +173,38 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Settings tab (placeholder)
+          // Settings tab
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: '/teacher/settings',
-                builder: (context, state) => const Scaffold(
-                  body: Center(child: Text('设置功能即将推出')),
-                ),
+                builder: (context, state) =>
+                    const TeacherSettingsScreen(),
               ),
             ],
           ),
         ],
       ),
     ],
+    errorBuilder: (context, state) => Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              '页面未找到',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => context.go('/'),
+              child: const Text('返回首页'),
+            ),
+          ],
+        ),
+      ),
+    ),
   );
 });

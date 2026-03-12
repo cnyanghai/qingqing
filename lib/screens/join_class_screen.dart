@@ -81,12 +81,10 @@ class _JoinClassScreenState extends ConsumerState<JoinClassScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (classroom.schoolName != null &&
-                classroom.schoolName!.isNotEmpty)
-              Text(
-                '学校: ${classroom.schoolName}',
-                style: const TextStyle(fontSize: 16),
-              ),
+            Text(
+              '学校: ${(classroom.schoolName != null && classroom.schoolName!.isNotEmpty) ? classroom.schoolName! : '未知学校'}',
+              style: const TextStyle(fontSize: 16),
+            ),
             const SizedBox(height: 8),
             Text(
               '班级: ${classroom.displayName}',

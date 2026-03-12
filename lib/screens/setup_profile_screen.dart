@@ -126,7 +126,7 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
                 maxLength: 8,
                 decoration: InputDecoration(
                   hintText: '输入你的昵称',
-                  counterText: '${_nicknameController.text.length}/8',
+                  counterText: '',
                   suffixText: '${_nicknameController.text.length}/8',
                 ),
                 onChanged: (_) => setState(() {}),
