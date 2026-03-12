@@ -6,7 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../models/profile.dart';
 
 /// T1: Teacher registration / class creation screen
-/// Phase 0 uses email+password auth instead of phone
+/// Phone number is stored as {phone}@qingqing.local in Supabase email field
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
@@ -15,7 +15,7 @@ class RegisterScreen extends ConsumerStatefulWidget {
 }
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
-  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _schoolController = TextEditingController();
@@ -24,8 +24,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   int? _selectedGrade;
   bool _isLoading = false;
 
+  /// Validate Chinese mobile number: exactly 11 digits, starts with 1
+  bool get _isValidPhone {
+    final phone = _phoneController.text.trim();
+    return RegExp(r'^1\d{10}$').hasMatch(phone);
+  }
+
   bool get _canSubmit =>
-      _emailController.text.isNotEmpty &&
+      _isValidPhone &&
       _passwordController.text.length >= 6 &&
       _nameController.text.isNotEmpty &&
       _schoolController.text.isNotEmpty &&
@@ -35,7 +41,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
     _schoolController.dispose();
@@ -50,9 +56,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     try {
       final service = ref.read(supabaseServiceProvider);
 
-      // 1. Create auth user (email+password)
+      // 1. Create auth user (phone stored as email)
+      final email = '${_phoneController.text.trim()}@qingqing.local';
       final authResponse = await service.signUpWithEmail(
-        _emailController.text.trim(),
+        email,
         _passwordController.text,
       );
       final userId = authResponse.user?.id;
@@ -137,18 +144,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              // Email
-              const Text('邮箱',
+              // Phone
+              const Text('手机号',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   )),
               const SizedBox(height: 8),
               TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
-                  hintText: '请输入邮箱地址',
+                  hintText: '请输入手机号',
                 ),
                 onChanged: (_) => setState(() {}),
               ),

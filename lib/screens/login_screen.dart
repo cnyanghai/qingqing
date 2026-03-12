@@ -13,19 +13,25 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
 
+  /// Validate Chinese mobile number: exactly 11 digits, starts with 1
+  bool get _isValidPhone {
+    final phone = _phoneController.text.trim();
+    return RegExp(r'^1\d{10}$').hasMatch(phone);
+  }
+
   bool get _canSubmit =>
-      _emailController.text.isNotEmpty &&
+      _isValidPhone &&
       _passwordController.text.length >= 6 &&
       !_isLoading;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -37,9 +43,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final service = ref.read(supabaseServiceProvider);
 
-      // 1. Sign in
+      // 1. Sign in (phone stored as email)
+      final email = '${_phoneController.text.trim()}@qingqing.local';
       final authResponse = await service.signInWithEmail(
-        _emailController.text.trim(),
+        email,
         _passwordController.text,
       );
       final userId = authResponse.user?.id;
@@ -110,18 +117,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              // Email
-              const Text('邮箱',
+              // Phone
+              const Text('手机号',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   )),
               const SizedBox(height: 8),
               TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
-                  hintText: '请输入邮箱地址',
+                  hintText: '请输入手机号',
                 ),
                 onChanged: (_) => setState(() {}),
               ),

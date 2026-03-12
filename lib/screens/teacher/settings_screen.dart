@@ -7,7 +7,7 @@ import '../../providers/profile_provider.dart';
 import '../../providers/teacher_provider.dart';
 
 /// Teacher settings screen — minimal implementation for Phase 0
-/// Shows teacher name, email, class code, and logout button
+/// Shows teacher name, phone number, class code, and logout button
 class TeacherSettingsScreen extends ConsumerWidget {
   const TeacherSettingsScreen({super.key});
 
@@ -53,7 +53,8 @@ class TeacherSettingsScreen extends ConsumerWidget {
                   }
 
                   final client = ref.read(supabaseClientProvider);
-                  final email = client.auth.currentUser?.email ?? '未设置';
+                  final rawEmail = client.auth.currentUser?.email;
+                  final phone = rawEmail?.replaceAll('@qingqing.local', '') ?? '未设置';
 
                   return Container(
                     width: double.infinity,
@@ -84,7 +85,7 @@ class TeacherSettingsScreen extends ConsumerWidget {
                         const SizedBox(height: AppSpacing.md),
                         _infoRow('姓名', profile.nickname),
                         const Divider(height: 24),
-                        _infoRow('邮箱', email),
+                        _infoRow('手机号', phone),
                       ],
                     ),
                   );
