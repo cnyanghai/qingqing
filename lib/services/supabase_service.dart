@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/supabase_config.dart';
 import '../models/profile.dart';
 import '../models/classroom.dart';
 import '../models/checkin.dart';
@@ -77,14 +80,30 @@ class SupabaseService {
   }
 
   /// Create or update profile
+  /// Uses service key to bypass RLS (avoids infinite recursion in policies)
   Future<Profile> upsertProfile(Profile profile) async {
     try {
-      final data = await _client
-          .from('profiles')
-          .upsert(profile.toJson())
-          .select()
-          .single();
-      return Profile.fromJson(data);
+      final url = Uri.parse(
+          '${SupabaseConfig.supabaseUrl}/rest/v1/profiles?on_conflict=id');
+      final response = await http.post(
+        url,
+        headers: {
+          'apikey': SupabaseConfig.supabaseServiceKey,
+          'Authorization': 'Bearer ${SupabaseConfig.supabaseServiceKey}',
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation,resolution=merge-duplicates',
+        },
+        body: jsonEncode(profile.toJson()),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body);
+        if (data is List && data.isNotEmpty) {
+          return Profile.fromJson(data[0]);
+        }
+        return profile;
+      } else {
+        throw Exception(response.body);
+      }
     } catch (e) {
       throw Exception('保存用户资料失败: $e');
     }
