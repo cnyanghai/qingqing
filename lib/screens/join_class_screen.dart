@@ -62,7 +62,7 @@ class _JoinClassScreenState extends ConsumerState<JoinClassScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = '查询失败，请检查网络后重试';
+          _errorMessage = '查询失败: $e';
           _isLoading = false;
         });
       }
