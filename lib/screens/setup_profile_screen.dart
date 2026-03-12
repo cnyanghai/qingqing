@@ -81,7 +81,7 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('注册失败，请重试')),
+          SnackBar(content: Text('注册失败: $e')),
         );
         setState(() => _isLoading = false);
       }
