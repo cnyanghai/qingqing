@@ -6,7 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../widgets/avatar_picker.dart';
 
-/// S3: Setup nickname and avatar after joining class
+/// S3: Setup account and profile after joining class
 class SetupProfileScreen extends ConsumerStatefulWidget {
   final String? classroomId;
 
@@ -18,11 +18,21 @@ class SetupProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
-  String? _selectedAvatar;
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _nicknameController = TextEditingController();
+  String? _selectedAvatar;
   bool _isLoading = false;
 
+  /// Validate Chinese mobile number: exactly 11 digits, starts with 1
+  bool get _isValidPhone {
+    final phone = _phoneController.text.trim();
+    return RegExp(r'^1\d{10}$').hasMatch(phone);
+  }
+
   bool get _canSubmit =>
+      _isValidPhone &&
+      _passwordController.text.length >= 6 &&
       _selectedAvatar != null &&
       _nicknameController.text.isNotEmpty &&
       _nicknameController.text.length <= 8 &&
@@ -30,6 +40,8 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
 
   @override
   void dispose() {
+    _phoneController.dispose();
+    _passwordController.dispose();
     _nicknameController.dispose();
     super.dispose();
   }
@@ -40,11 +52,20 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final userId = ref.read(currentUserIdProvider);
+      final service = ref.read(supabaseServiceProvider);
+
+      // 1. Create auth user (phone stored as email)
+      final email = '${_phoneController.text.trim()}@qingqing.local';
+      final authResponse = await service.signUpWithEmail(
+        email,
+        _passwordController.text,
+      );
+      final userId = authResponse.user?.id;
       if (userId == null) {
-        throw Exception('用户未登录');
+        throw Exception('注册失败，未获取到用户信息');
       }
 
+      // 2. Create student profile
       final actions = ref.read(profileActionsProvider);
       await actions.createStudentProfile(
         userId: userId,
@@ -53,13 +74,14 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
         classroomId: widget.classroomId ?? '',
       );
 
+      // 3. Navigate to home
       if (mounted) {
         context.go('/home');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败，请重试')),
+          SnackBar(content: Text('注册失败，请重试')),
         );
         setState(() => _isLoading = false);
       }
@@ -77,7 +99,7 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
               const SizedBox(height: AppSpacing.xl),
               // Title
               const Text(
-                '给自己取个名字吧',
+                '创建你的账号',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -86,11 +108,53 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
               ),
               const SizedBox(height: AppSpacing.sm),
               const Text(
-                '让我们更好地了解你',
+                '填写信息后即可开始记录心情',
                 style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
                 ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              // Phone number
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '手机号',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  hintText: '请输入手机号',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Password
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '密码',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  hintText: '请输入密码（至少6位）',
+                ),
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: AppSpacing.xl),
               // Large avatar preview
@@ -163,7 +227,7 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               const Text(
-                '随时可以在设置中更改这些信息',
+                '随时可以在设置中更改昵称和头像',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textHint,

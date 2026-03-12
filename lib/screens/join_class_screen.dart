@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../config/theme.dart';
 import '../models/classroom.dart';
-import '../providers/auth_provider.dart';
 import '../providers/classroom_provider.dart';
 import '../widgets/pin_input.dart';
 
@@ -51,10 +50,6 @@ class _JoinClassScreenState extends ConsumerState<JoinClassScreen> {
         return;
       }
 
-      // Create anonymous auth user
-      final service = ref.read(supabaseServiceProvider);
-      await service.signInAnonymously();
-
       if (!mounted) return;
 
       // Navigate to profile setup with classroom ID
@@ -62,7 +57,7 @@ class _JoinClassScreenState extends ConsumerState<JoinClassScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = '查询失败: $e';
+          _errorMessage = '查询失败，请检查网络后重试';
           _isLoading = false;
         });
       }
