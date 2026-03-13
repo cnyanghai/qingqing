@@ -55,12 +55,28 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
       final service = ref.read(supabaseServiceProvider);
 
       // 1. Create auth user (phone stored as email)
+      // If user already exists (previous failed attempt), try signing in instead
       final email = '${_phoneController.text.trim()}@qingqing.local';
-      final authResponse = await service.signUpWithEmail(
-        email,
-        _passwordController.text,
-      );
-      final userId = authResponse.user?.id;
+      String? userId;
+      try {
+        final authResponse = await service.signUpWithEmail(
+          email,
+          _passwordController.text,
+        );
+        userId = authResponse.user?.id;
+      } catch (e) {
+        if (e.toString().contains('user_already_exists') ||
+            e.toString().contains('already registered')) {
+          // User exists from a previous failed attempt, try login
+          final loginResponse = await service.signInWithEmail(
+            email,
+            _passwordController.text,
+          );
+          userId = loginResponse.user?.id;
+        } else {
+          rethrow;
+        }
+      }
       if (userId == null) {
         throw Exception('注册失败，未获取到用户信息');
       }
