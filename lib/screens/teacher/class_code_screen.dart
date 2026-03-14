@@ -1,23 +1,88 @@
+// ignore_for_file: avoid_web_libraries_in_flutter
+import 'dart:convert';
+import 'dart:ui' as ui;
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../config/theme.dart';
 
 /// T5: Class code sharing screen with QR code
-class ClassCodeScreen extends StatelessWidget {
+class ClassCodeScreen extends StatefulWidget {
   final String classCode;
 
   const ClassCodeScreen({super.key, required this.classCode});
 
+  @override
+  State<ClassCodeScreen> createState() => _ClassCodeScreenState();
+}
+
+class _ClassCodeScreenState extends State<ClassCodeScreen> {
+  final _repaintBoundaryKey = GlobalKey();
+  bool _isSaving = false;
+
   String get _formattedCode {
-    if (classCode.length == 6) {
-      return '${classCode.substring(0, 3)} \u00B7 ${classCode.substring(3)}';
+    if (widget.classCode.length == 6) {
+      return '${widget.classCode.substring(0, 3)} \u00B7 ${widget.classCode.substring(3)}';
     }
-    return classCode;
+    return widget.classCode;
   }
 
-  String get _qrContent => 'https://cnyanghai.github.io/qingqing/';
+  String get _qrContent => 'https://cnyanghai.github.io/qingqing/#/join?code=${widget.classCode}';
+
+  Future<void> _saveImage() async {
+    setState(() => _isSaving = true);
+    try {
+      final boundary = _repaintBoundaryKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('保存失败，请重试')),
+          );
+        }
+        return;
+      }
+
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('图片生成失败，请重试')),
+          );
+        }
+        return;
+      }
+
+      final bytes = byteData.buffer.asUint8List();
+      final base64Data = base64Encode(bytes);
+      final dataUrl = 'data:image/png;base64,$base64Data';
+
+      final anchor = html.AnchorElement(href: dataUrl)
+        ..setAttribute('download', '晴晴_班级码_${widget.classCode}.png')
+        ..click();
+      anchor.remove();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('图片已保存')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保存失败，请重试')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,51 +100,64 @@ class ClassCodeScreen extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: AppSpacing.xl),
-              // Code display
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: AppColors.divider,
-                    width: 1,
-                    strokeAlign: BorderSide.strokeAlignInside,
-                  ),
-                  borderRadius: BorderRadius.circular(AppRadius.large),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      _formattedCode,
-                      style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark,
-                        letterSpacing: 4,
+              // Capture area for save image
+              RepaintBoundary(
+                key: _repaintBoundaryKey,
+                child: Container(
+                  color: AppColors.background,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    children: [
+                      // Code display
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          border: Border.all(
+                            color: AppColors.divider,
+                            width: 1,
+                            strokeAlign: BorderSide.strokeAlignInside,
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.large),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              _formattedCode,
+                              style: const TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textDark,
+                                letterSpacing: 4,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              // QR Code
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(AppRadius.large),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: QrImageView(
-                  data: _qrContent,
-                  version: QrVersions.auto,
-                  size: 200,
-                  backgroundColor: AppColors.white,
+                      const SizedBox(height: AppSpacing.xl),
+                      // QR Code
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          borderRadius: BorderRadius.circular(AppRadius.large),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: QrImageView(
+                          data: _qrContent,
+                          version: QrVersions.auto,
+                          size: 200,
+                          backgroundColor: AppColors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
@@ -89,7 +167,7 @@ class ClassCodeScreen extends StatelessWidget {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: () {
-                    Clipboard.setData(ClipboardData(text: classCode));
+                    Clipboard.setData(ClipboardData(text: widget.classCode));
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('班级码已复制')),
                     );
@@ -105,13 +183,14 @@ class ClassCodeScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 52,
                 child: OutlinedButton(
-                  onPressed: () {
-                    // TODO: Implement save as image
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('保存图片功能即将推出')),
-                    );
-                  },
-                  child: const Text('保存图片'),
+                  onPressed: _isSaving ? null : _saveImage,
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('保存图片'),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),

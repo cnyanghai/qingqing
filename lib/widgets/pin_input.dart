@@ -7,12 +7,14 @@ class PinInput extends StatefulWidget {
   final int length;
   final ValueChanged<String> onCompleted;
   final ValueChanged<String>? onChanged;
+  final String? initialValue;
 
   const PinInput({
     super.key,
     this.length = 6,
     required this.onCompleted,
     this.onChanged,
+    this.initialValue,
   });
 
   @override
@@ -34,6 +36,22 @@ class _PinInputState extends State<PinInput> {
       widget.length,
       (_) => FocusNode(),
     );
+
+    // Pre-fill initial value if provided
+    if (widget.initialValue != null) {
+      final initial = widget.initialValue!;
+      for (int i = 0; i < initial.length && i < widget.length; i++) {
+        _controllers[i].text = initial[i];
+      }
+      // Trigger callbacks after frame to ensure widget is fully built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final currentValue = _currentValue;
+        widget.onChanged?.call(currentValue);
+        if (currentValue.length == widget.length) {
+          widget.onCompleted(currentValue);
+        }
+      });
+    }
   }
 
   @override

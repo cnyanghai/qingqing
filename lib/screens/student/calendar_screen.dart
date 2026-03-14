@@ -5,6 +5,7 @@ import '../../models/checkin.dart';
 import '../../models/emotion.dart';
 import '../../providers/checkin_provider.dart';
 import '../../widgets/mood_calendar.dart';
+import '../../widgets/semester_overview.dart';
 
 /// S6: Emotion calendar screen
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -81,10 +82,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined),
-                    onPressed: () {},
-                  ),
+                  const SizedBox(width: 48), // 保持布局平衡
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -164,7 +162,23 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 ),
               ),
               // Selected day detail is shown via bottom sheet (see onDayTap)
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
+              // Semester overview entry
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => _showSemesterOverview(context),
+                  child: const Text(
+                    '查看学期概览 \u2192',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
               // Monthly distribution
               checkinsAsync.when(
                 loading: () => const SizedBox.shrink(),
@@ -302,6 +316,60 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               const SizedBox(height: AppSpacing.md),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  void _showSemesterOverview(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xLarge)),
+      ),
+      backgroundColor: AppColors.white,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          maxChildSize: 0.95,
+          minChildSize: 0.5,
+          expand: false,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '学期概览',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  // Semester overview matrix
+                  const Expanded(
+                    child: SingleChildScrollView(
+                      child: SemesterOverview(),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );

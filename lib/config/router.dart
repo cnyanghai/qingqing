@@ -62,7 +62,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // S2: Join class
       GoRoute(
         path: '/join',
-        builder: (context, state) => const JoinClassScreen(),
+        builder: (context, state) {
+          final code = state.uri.queryParameters['code'];
+          return JoinClassScreen(initialCode: code);
+        },
       ),
 
       // S3: Setup profile

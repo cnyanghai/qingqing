@@ -71,7 +71,11 @@ class _StudentListScreenState extends ConsumerState<StudentListScreen> {
                   IconButton(
                     icon: const Icon(Icons.filter_list,
                         color: AppColors.textSecondary),
-                    onPressed: () {},
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('筛选功能即将推出')),
+                      );
+                    },
                   ),
                 ],
               ),

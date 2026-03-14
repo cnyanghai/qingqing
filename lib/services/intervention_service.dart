@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Simple in-memory intervention record storage (Phase 0 simplification).
+/// Simple intervention record storage with SharedPreferences persistence.
 /// In production, this would be backed by a database table.
 class InterventionService {
   InterventionService._();
+
+  static const _storageKey = 'intervention_records';
 
   // Static storage: studentId -> list of records
   static final Map<String, List<InterventionRecord>> _records = {};
@@ -14,7 +18,7 @@ class InterventionService {
   }
 
   /// Add an intervention record for a student
-  static void addRecord(String studentId, String content) {
+  static Future<void> addRecord(String studentId, String content) async {
     _records.putIfAbsent(studentId, () => []);
     _records[studentId]!.insert(
       0,
@@ -23,9 +27,33 @@ class InterventionService {
         createdAt: DateTime.now(),
       ),
     );
+    await _persist();
   }
 
-  /// Serialize all records to JSON string (for potential persistence)
+  /// Persist all records to SharedPreferences
+  static Future<void> _persist() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_storageKey, toJson());
+    } catch (e) {
+      debugPrint('InterventionService persist error: $e');
+    }
+  }
+
+  /// Load records from SharedPreferences
+  static Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_storageKey);
+      if (jsonStr != null) {
+        fromJson(jsonStr);
+      }
+    } catch (_) {
+      // Silently fail on load errors
+    }
+  }
+
+  /// Serialize all records to JSON string
   static String toJson() {
     final map = <String, dynamic>{};
     _records.forEach((key, records) {
@@ -34,7 +62,7 @@ class InterventionService {
     return jsonEncode(map);
   }
 
-  /// Load records from JSON string (for potential persistence)
+  /// Load records from JSON string
   static void fromJson(String jsonStr) {
     try {
       final map = jsonDecode(jsonStr) as Map<String, dynamic>;

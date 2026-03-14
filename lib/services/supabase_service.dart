@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/profile.dart';
 import '../models/classroom.dart';
@@ -319,6 +320,7 @@ class SupabaseService {
 
       return streak;
     } catch (e) {
+      debugPrint('Streak calculation error: $e');
       return 0;
     }
   }
@@ -422,6 +424,20 @@ class SupabaseService {
   }
 
   // ---------- Schools ----------
+
+  /// Search schools by name with fuzzy matching
+  Future<List<Map<String, dynamic>>> searchSchools(String query) async {
+    try {
+      final data = await _client
+          .from('schools')
+          .select('id, name')
+          .ilike('name', '%$query%')
+          .limit(10);
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      throw Exception('搜索学校失败: $e');
+    }
+  }
 
   /// Find school by name, or create it if not found
   Future<String> findOrCreateSchool(String schoolName) async {

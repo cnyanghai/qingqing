@@ -8,16 +8,24 @@ import '../widgets/pin_input.dart';
 
 /// S2: Join classroom by entering a 6-digit code
 class JoinClassScreen extends ConsumerStatefulWidget {
-  const JoinClassScreen({super.key});
+  final String? initialCode;
+
+  const JoinClassScreen({super.key, this.initialCode});
 
   @override
   ConsumerState<JoinClassScreen> createState() => _JoinClassScreenState();
 }
 
 class _JoinClassScreenState extends ConsumerState<JoinClassScreen> {
-  String _code = '';
+  late String _code;
   bool _isLoading = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _code = widget.initialCode ?? '';
+  }
 
   bool get _isCodeComplete => _code.length == 6;
 
@@ -155,6 +163,7 @@ class _JoinClassScreenState extends ConsumerState<JoinClassScreen> {
               const SizedBox(height: AppSpacing.xl),
               // Pin input
               PinInput(
+                initialValue: widget.initialCode,
                 onCompleted: (value) {
                   setState(() => _code = value);
                 },

@@ -48,6 +48,41 @@ final monthCheckinsProvider =
   }
 });
 
+/// Semester check-ins (20 weeks = 140 days from semester start)
+final semesterCheckinsProvider = FutureProvider<List<Checkin>>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return [];
+
+  final service = ref.watch(supabaseServiceProvider);
+  try {
+    final now = DateTime.now();
+    // Determine semester start: Sep 1 for fall, Mar 1 for spring
+    // Pick the most recent semester start that is not in the future
+    final currentYear = now.year;
+    final fallStart = DateTime(currentYear, 9, 1);
+    final springStart = DateTime(currentYear, 3, 1);
+    final lastFallStart = DateTime(currentYear - 1, 9, 1);
+
+    DateTime semesterStart;
+    if (!fallStart.isAfter(now)) {
+      semesterStart = fallStart;
+    } else if (!springStart.isAfter(now)) {
+      semesterStart = springStart;
+    } else {
+      semesterStart = lastFallStart;
+    }
+
+    final semesterEnd = semesterStart.add(const Duration(days: 140));
+    return await service.getCheckins(
+      userId,
+      startDate: semesterStart,
+      endDate: semesterEnd,
+    );
+  } catch (e) {
+    return [];
+  }
+});
+
 /// Check-in result after submission
 class CheckinResult {
   final Checkin checkin;

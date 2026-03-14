@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,11 +19,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
-  final _schoolController = TextEditingController();
   final _classNumberController = TextEditingController();
 
+  String _schoolName = '';
   int? _selectedGrade;
   bool _isLoading = false;
+  Timer? _debounceTimer;
+  Completer<Iterable<String>>? _searchCompleter;
 
   /// Validate Chinese mobile number: exactly 11 digits, starts with 1
   bool get _isValidPhone {
@@ -34,7 +37,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       _isValidPhone &&
       _passwordController.text.length >= 6 &&
       _nameController.text.isNotEmpty &&
-      _schoolController.text.isNotEmpty &&
+      _schoolName.isNotEmpty &&
       _selectedGrade != null &&
       _classNumberController.text.isNotEmpty &&
       !_isLoading;
@@ -44,8 +47,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
-    _schoolController.dispose();
     _classNumberController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
@@ -84,7 +87,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
       // 2. Find or create school
       final schoolId =
-          await service.findOrCreateSchool(_schoolController.text.trim());
+          await service.findOrCreateSchool(_schoolName.trim());
 
       // 3. Generate unique 6-digit join code
       final joinCode = await service.generateUniqueJoinCode();
@@ -213,12 +216,56 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     fontWeight: FontWeight.w500,
                   )),
               const SizedBox(height: 8),
-              TextField(
-                controller: _schoolController,
-                decoration: const InputDecoration(
-                  hintText: '输入学校名称',
-                ),
-                onChanged: (_) => setState(() {}),
+              Autocomplete<String>(
+                optionsBuilder: (TextEditingValue textEditingValue) async {
+                  final query = textEditingValue.text.trim();
+                  if (query.length < 2) {
+                    return const Iterable<String>.empty();
+                  }
+                  // Complete any previous pending completer to avoid memory leak
+                  if (_searchCompleter != null && !_searchCompleter!.isCompleted) {
+                    _searchCompleter!.complete(const Iterable<String>.empty());
+                  }
+                  _debounceTimer?.cancel();
+                  final completer = Completer<Iterable<String>>();
+                  _searchCompleter = completer;
+                  _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
+                    try {
+                      final service = ref.read(supabaseServiceProvider);
+                      final results = await service.searchSchools(query);
+                      final names = results
+                          .map((r) => r['name'] as String)
+                          .toList();
+                      if (!completer.isCompleted) {
+                        completer.complete(names);
+                      }
+                    } catch (_) {
+                      if (!completer.isCompleted) {
+                        completer.complete(const Iterable<String>.empty());
+                      }
+                    }
+                  });
+                  return completer.future;
+                },
+                onSelected: (String selection) {
+                  setState(() {
+                    _schoolName = selection;
+                  });
+                },
+                fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                  return TextField(
+                    controller: textEditingController,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(
+                      hintText: '输入学校名称',
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _schoolName = value;
+                      });
+                    },
+                  );
+                },
               ),
               const SizedBox(height: AppSpacing.md),
               // Grade selection

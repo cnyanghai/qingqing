@@ -60,30 +60,17 @@ class ProfileScreen extends ConsumerWidget {
                   child: Column(
                     children: [
                       // App bar row
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
+                      const Padding(
+                        padding: EdgeInsets.symmetric(
                             horizontal: AppSpacing.md),
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 48), // Balance the settings button
-                            const Expanded(
-                              child: Text(
-                                '个人资料',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.white,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                  Icons.settings_outlined,
-                                  color: AppColors.white),
-                              onPressed: () {},
-                            ),
-                          ],
+                        child: Text(
+                          '个人资料',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.white,
+                          ),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -167,28 +154,13 @@ class ProfileScreen extends ConsumerWidget {
                       horizontal: AppSpacing.lg),
                   child: Column(
                     children: [
-                      Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            '已获勋章',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {},
-                            child: const Text(
-                              '查看全部',
-                              style: TextStyle(
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        ],
+                      const Text(
+                        '已获勋章',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       // Horizontal badge list

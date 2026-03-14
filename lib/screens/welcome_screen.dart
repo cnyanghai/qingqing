@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../config/theme.dart';
+import '../providers/auth_provider.dart';
+import '../providers/profile_provider.dart';
 
 /// S1: Welcome/Login page
 class WelcomeScreen extends ConsumerWidget {
@@ -9,6 +11,37 @@ class WelcomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final userId = ref.watch(currentUserIdProvider);
+
+    // 已登录用户：加载profile后手动跳转
+    if (userId != null) {
+      final profileAsync = ref.watch(profileProvider);
+
+      if (profileAsync.isLoading) {
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      final profile = profileAsync.valueOrNull;
+      if (profile != null) {
+        // 使用 addPostFrameCallback 避免在 build 中直接导航
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            if (profile.role == 'teacher') {
+              context.go('/teacher/home');
+            } else {
+              context.go('/home');
+            }
+          }
+        });
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      }
+      // profileAsync.hasError: 降级显示WelcomeScreen让用户重新操作
+    }
+
     return Scaffold(
       body: Container(
         width: double.infinity,

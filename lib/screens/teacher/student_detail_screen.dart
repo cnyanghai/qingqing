@@ -549,15 +549,19 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             child: const Text('取消'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               final text = controller.text.trim();
               if (text.isNotEmpty) {
-                InterventionService.addRecord(widget.studentId, text);
+                await InterventionService.addRecord(widget.studentId, text);
                 _refreshInterventions();
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('记录已保存')),
-                );
+                if (ctx.mounted) {
+                  Navigator.of(ctx).pop();
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('记录已保存')),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(

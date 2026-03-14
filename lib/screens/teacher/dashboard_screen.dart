@@ -126,11 +126,7 @@ class DashboardScreen extends ConsumerWidget {
             ],
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined,
-              color: AppColors.textSecondary),
-          onPressed: () {},
-        ),
+        const SizedBox(width: 48), // 保持布局平衡
       ],
     );
   }
@@ -389,13 +385,11 @@ class DashboardScreen extends ConsumerWidget {
 
     String alertMessage;
     if (alertStudents.isNotEmpty) {
-      final names = alertStudents.take(2).map((s) => s.nickname).join('、');
-      final remaining = alertStudents.length > 2
-          ? '等${alertStudents.length}位同学'
-          : alertStudents.length == 1
-              ? ''
-              : '等${alertStudents.length}位同学';
-      alertMessage = '$names${remaining}今日情绪波动较大，建议午间进行心理疏导。';
+      const displayCount = 2;
+      final names = alertStudents.take(displayCount).map((s) => s.nickname).join('、');
+      final remaining = alertStudents.length - displayCount;
+      final remainingSuffix = remaining > 0 ? '等$remaining位同学' : '';
+      alertMessage = '$names$remainingSuffix今日情绪波动较大，建议午间进行心理疏导。';
     } else {
       alertMessage = '今日红色和蓝色情绪占比超过40%，建议关注班级整体情绪状态。';
     }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/badge.dart';
 import 'supabase_service.dart';
 
@@ -63,7 +64,7 @@ class BadgeService {
         }
       }
     } catch (e) {
-      // Badge awarding is non-critical — swallow errors
+      debugPrint('Badge check error: $e');
     }
 
     return newBadges;
