@@ -237,7 +237,7 @@ class _StudentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusInfo = _getStatusInfo();
     final activityDot = _getActivityDot();
-    final last7Days = _getLast7DaysColors();
+    final last7DaysColors = _getLast7DaysColors();
 
     return GestureDetector(
       onTap: onTap,
@@ -294,15 +294,41 @@ class _StudentCard extends StatelessWidget {
                   Row(
                     children: [
                       // 7-day color blocks
-                      ...last7Days.map((color) => Container(
+                      ...last7DaysColors.map((dayColors) {
+                        if (dayColors.length == 1) {
+                          // Single color: standard 16x16 block
+                          return Container(
                             width: 16,
                             height: 16,
                             margin: const EdgeInsets.only(right: 3),
                             decoration: BoxDecoration(
-                              color: color,
+                              color: dayColors.first,
                               borderRadius: BorderRadius.circular(3),
                             ),
-                          )),
+                          );
+                        }
+                        // Multiple colors: side-by-side small blocks
+                        final displayColors = dayColors.take(3).toList();
+                        final blockWidth = 16.0 / displayColors.length;
+                        return Container(
+                          width: 16,
+                          height: 16,
+                          margin: const EdgeInsets.only(right: 3),
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Row(
+                            children: displayColors.map((color) {
+                              return SizedBox(
+                                width: blockWidth,
+                                height: 16,
+                                child: ColoredBox(color: color),
+                              );
+                            }).toList(),
+                          ),
+                        );
+                      }),
                       const SizedBox(width: 6),
                       const Text(
                         '情绪历史',
@@ -376,9 +402,15 @@ class _StudentCard extends StatelessWidget {
   _StatusInfo _getStatusInfo() {
     final sorted = List<Checkin>.from(recentCheckins)
       ..sort((a, b) => b.checkedAt.compareTo(a.checkedAt));
+    // 按日期去重：每天只保留最新一条
+    final seen = <String>{};
+    final deduped = sorted.where((c) {
+      final key = '${c.checkedAt.year}-${c.checkedAt.month}-${c.checkedAt.day}';
+      return seen.add(key);
+    }).toList();
 
     int consecutiveBlue = 0;
-    for (final c in sorted) {
+    for (final c in deduped) {
       if (c.quadrant == 'blue') {
         consecutiveBlue++;
       } else {
@@ -407,32 +439,35 @@ class _StudentCard extends StatelessWidget {
     );
   }
 
-  /// Get last 7 days mood color blocks
-  List<Color> _getLast7DaysColors() {
+  /// Get last 7 days mood color blocks (each day may have multiple colors)
+  List<List<Color>> _getLast7DaysColors() {
     final now = DateTime.now();
-    final colors = <Color>[];
+    final last7DaysColors = <List<Color>>[];
 
-    // Build a date -> quadrant map
-    final dateMap = <String, String>{};
+    // Build a date -> list of quadrants map
+    final dateMap = <String, List<String>>{};
     for (final c in recentCheckins) {
       final key =
           '${c.checkedAt.year}-${c.checkedAt.month.toString().padLeft(2, '0')}-${c.checkedAt.day.toString().padLeft(2, '0')}';
-      dateMap[key] = c.quadrant;
+      dateMap.putIfAbsent(key, () => []).add(c.quadrant);
     }
 
     for (int i = 6; i >= 0; i--) {
       final date = now.subtract(Duration(days: i));
       final key =
           '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-      final quadrant = dateMap[key];
-      if (quadrant != null) {
-        colors.add(AppColors.quadrantColor(quadrant));
+      final quadrants = dateMap[key];
+      if (quadrants != null && quadrants.isNotEmpty) {
+        // Take at most 3 colors (newest first)
+        last7DaysColors.add(
+          quadrants.take(3).map((q) => AppColors.quadrantColor(q)).toList(),
+        );
       } else {
-        colors.add(AppColors.divider);
+        last7DaysColors.add([AppColors.divider]);
       }
     }
 
-    return colors;
+    return last7DaysColors;
   }
 }
 

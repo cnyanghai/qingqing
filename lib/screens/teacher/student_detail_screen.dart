@@ -410,17 +410,19 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
       child: MoodCalendar(
         month: _calendarMonth,
         checkins: monthCheckins,
-        onDayTap: (checkin) {
-          _showCheckinDetail(checkin);
+        onDayTap: (checkins) {
+          _showCheckinDetail(checkins);
         },
       ),
     );
   }
 
-  void _showCheckinDetail(Checkin checkin) {
-    final emotion = EmotionData.findEmotionByLabel(checkin.emotionLabel);
-    final contextLabel = EmotionData.contextLabel(checkin.contextTag);
-    final quadrantColor = AppColors.quadrantColor(checkin.quadrant);
+  void _showCheckinDetail(List<Checkin> checkins) {
+    if (checkins.isEmpty) return;
+
+    final firstCheckin = checkins.first;
+    final dateTitle = '${firstCheckin.checkedAt.month}月${firstCheckin.checkedAt.day}日';
+    final countSuffix = checkins.length > 1 ? ' \u00b7 ${checkins.length}条记录' : '';
 
     showDialog(
       context: context,
@@ -434,64 +436,95 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               width: 10,
               height: 10,
               decoration: BoxDecoration(
-                color: quadrantColor,
+                color: AppColors.quadrantColor(firstCheckin.quadrant),
                 shape: BoxShape.circle,
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              '${checkin.checkedAt.month}月${checkin.checkedAt.day}日',
-              style: const TextStyle(fontSize: 16),
+            Expanded(
+              child: Text(
+                '$dateTitle$countSuffix',
+                style: const TextStyle(fontSize: 16),
+              ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${emotion?.emoji ?? ""} ${checkin.emotionLabel}',
-              style: const TextStyle(fontSize: 18),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '场景: $contextLabel',
-              style: const TextStyle(
-                  fontSize: 13, color: AppColors.textSecondary),
-            ),
-            if (checkin.note != null && checkin.note!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
-                  borderRadius: BorderRadius.circular(AppRadius.medium),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '学生留言:',
-                      style: TextStyle(
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: checkins.asMap().entries.map((entry) {
+              final index = entry.key;
+              final checkin = entry.value;
+              final emotion = EmotionData.findEmotionByLabel(checkin.emotionLabel);
+              final contextLabel = EmotionData.contextLabel(checkin.contextTag);
+
+              // Extract time from created_at
+              final timeStr = checkin.createdAt != null
+                  ? '${checkin.createdAt!.hour.toString().padLeft(2, '0')}:${checkin.createdAt!.minute.toString().padLeft(2, '0')}'
+                  : '';
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (index > 0)
+                    const Divider(height: 16, color: AppColors.divider),
+                  if (timeStr.isNotEmpty)
+                    Text(
+                      timeStr,
+                      style: const TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
+                        color: AppColors.textHint,
                       ),
                     ),
+                  if (timeStr.isNotEmpty)
                     const SizedBox(height: 4),
-                    Text(
-                      checkin.note!,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textDark,
+                  Text(
+                    '${emotion?.emoji ?? ""} ${checkin.emotionLabel}',
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '场景: $contextLabel',
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                  if (checkin.note != null && checkin.note!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(AppRadius.medium),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '学生留言:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            checkin.note!,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
-              ),
-            ],
-          ],
+                ],
+              );
+            }).toList(),
+          ),
         ),
         actions: [
           TextButton(

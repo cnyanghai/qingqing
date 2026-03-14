@@ -6,17 +6,22 @@ import '../services/badge_service.dart';
 import 'auth_provider.dart';
 import 'profile_provider.dart';
 
-/// Today's check-in for current user
-final todayCheckinProvider = FutureProvider<Checkin?>((ref) async {
+/// Today's check-ins for current user (multiple per day)
+final todayCheckinProvider = FutureProvider<List<Checkin>>((ref) async {
   final userId = ref.watch(currentUserIdProvider);
-  if (userId == null) return null;
+  if (userId == null) return [];
 
   final service = ref.watch(supabaseServiceProvider);
   try {
-    return await service.getTodayCheckin(userId);
+    return await service.getTodayCheckins(userId);
   } catch (e) {
-    return null;
+    return [];
   }
+});
+
+/// Today's check-in count for current user
+final todayCheckinCountProvider = Provider<int>((ref) {
+  return ref.watch(todayCheckinProvider).valueOrNull?.length ?? 0;
 });
 
 /// This week's check-ins for current user

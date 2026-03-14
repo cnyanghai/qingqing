@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../models/checkin.dart';
-import '../models/emotion.dart';
 
 /// GitHub-style mood calendar grid showing daily mood colors
 class MoodCalendar extends StatelessWidget {
   final DateTime month;
   final List<Checkin> checkins;
-  final ValueChanged<Checkin>? onDayTap;
+  final ValueChanged<List<Checkin>>? onDayTap;
 
   const MoodCalendar({
     super.key,
@@ -18,11 +17,11 @@ class MoodCalendar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Build a map of date -> checkin for quick lookup
-    final checkinMap = <String, Checkin>{};
+    // Build a map of date -> list of checkins for quick lookup
+    final checkinMap = <String, List<Checkin>>{};
     for (final c in checkins) {
       final key = _dateKey(c.checkedAt);
-      checkinMap[key] = c;
+      checkinMap.putIfAbsent(key, () => []).add(c);
     }
 
     final firstDay = DateTime(month.year, month.month, 1);
@@ -69,24 +68,15 @@ class MoodCalendar extends StatelessWidget {
             final day = index - startWeekday + 1;
             final date = DateTime(month.year, month.month, day);
             final key = _dateKey(date);
-            final checkin = checkinMap[key];
+            final dayCheckins = checkinMap[key] ?? [];
             final isToday = _isToday(date);
             final isFuture = date.isAfter(DateTime.now());
 
-            Color tileColor;
-            if (checkin != null) {
-              tileColor = AppColors.quadrantColor(checkin.quadrant);
-            } else if (isFuture) {
-              tileColor = AppColors.cardBackground;
-            } else {
-              tileColor = const Color(0xFFE0E0E0);
-            }
-
-            return GestureDetector(
-              onTap: checkin != null ? () => onDayTap?.call(checkin) : null,
-              child: Container(
+            if (dayCheckins.isEmpty) {
+              // No records: grey or future
+              return Container(
                 decoration: BoxDecoration(
-                  color: tileColor,
+                  color: isFuture ? AppColors.cardBackground : const Color(0xFFE0E0E0),
                   borderRadius: BorderRadius.circular(6),
                   border: isToday
                       ? Border.all(color: AppColors.primary, width: 2)
@@ -98,11 +88,73 @@ class MoodCalendar extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                      color: checkin != null
-                          ? AppColors.white
-                          : AppColors.textSecondary,
+                      color: AppColors.textSecondary,
                     ),
                   ),
+                ),
+              );
+            }
+
+            if (dayCheckins.length == 1) {
+              // Single record: full color fill (keep existing behavior)
+              return GestureDetector(
+                onTap: () => onDayTap?.call(dayCheckins),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.quadrantColor(dayCheckins.first.quadrant),
+                    borderRadius: BorderRadius.circular(6),
+                    border: isToday
+                        ? Border.all(color: AppColors.primary, width: 2)
+                        : null,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$day',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                        color: AppColors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            // Multiple records: color splits (2-3 colors, 4+ takes newest 3)
+            final displayCheckins = dayCheckins.take(3).toList();
+            return GestureDetector(
+              onTap: () => onDayTap?.call(dayCheckins),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: isToday
+                      ? Border.all(color: AppColors.primary, width: 2)
+                      : null,
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    Row(
+                      children: displayCheckins.map((c) {
+                        return Expanded(
+                          child: Container(
+                            color: AppColors.quadrantColor(c.quadrant),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    Center(
+                      child: Text(
+                        '$day',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                          color: AppColors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -121,83 +173,5 @@ class MoodCalendar extends StatelessWidget {
     return date.year == now.year &&
         date.month == now.month &&
         date.day == now.day;
-  }
-}
-
-/// Detail popup for a specific day's check-in
-class CheckinDetailPopup extends StatelessWidget {
-  final Checkin checkin;
-
-  const CheckinDetailPopup({super.key, required this.checkin});
-
-  @override
-  Widget build(BuildContext context) {
-    final emotion = EmotionData.findEmotionByLabel(checkin.emotionLabel);
-    final contextLabel = EmotionData.contextLabel(checkin.contextTag);
-    final quadrantColor = AppColors.quadrantColor(checkin.quadrant);
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.large),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: quadrantColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${checkin.checkedAt.month}月${checkin.checkedAt.day}日',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            '${emotion?.emoji ?? ""} ${checkin.emotionLabel}',
-            style: const TextStyle(fontSize: 16),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '场景: $contextLabel',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          if (checkin.note != null && checkin.note!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              checkin.note!,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textDark,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }

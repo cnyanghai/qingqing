@@ -41,11 +41,11 @@ class SemesterOverview extends ConsumerWidget {
   Widget _buildMatrix(List<Checkin> checkins) {
     final semesterStart = _semesterStart();
 
-    // Build a date -> quadrant map
+    // Build a date -> quadrant map (keep latest per day)
     final dateQuadrants = <String, String>{};
     for (final c in checkins) {
       final key = _formatDate(c.checkedAt);
-      dateQuadrants[key] = c.quadrant;
+      dateQuadrants.putIfAbsent(key, () => c.quadrant); // 保留最新一条（列表倒序，第一个即最新）
     }
 
     // Find the Monday of the week containing semesterStart

@@ -153,8 +153,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                       data: (checkins) => MoodCalendar(
                         month: _currentMonth,
                         checkins: checkins,
-                        onDayTap: (checkin) {
-                          _showCheckinDetail(checkin);
+                        onDayTap: (checkins) {
+                          _showCheckinDetail(checkins);
                         },
                       ),
                     ),
@@ -196,25 +196,21 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     );
   }
 
-  void _showCheckinDetail(Checkin checkin) {
-    final emotion = EmotionData.findEmotionByLabel(checkin.emotionLabel);
-    final contextOption = EmotionData.contextOptions
-        .where((c) => c.key == checkin.contextTag)
-        .toList();
-    final contextLabel = contextOption.isNotEmpty
-        ? contextOption.first.label
-        : checkin.contextTag;
-    final contextIcon = contextOption.isNotEmpty
-        ? contextOption.first.icon
-        : '';
-    final quadrantColor = AppColors.quadrantColor(checkin.quadrant);
+  void _showCheckinDetail(List<Checkin> checkins) {
+    if (checkins.isEmpty) return;
 
+    final firstCheckin = checkins.first;
     // Weekday names
     const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    final weekday = weekdays[checkin.checkedAt.weekday - 1];
+    final weekday = weekdays[firstCheckin.checkedAt.weekday - 1];
+
+    // Title: date + record count (don't show "1条记录" for single record)
+    final dateTitle = '${firstCheckin.checkedAt.year}年${firstCheckin.checkedAt.month}月${firstCheckin.checkedAt.day}日 $weekday';
+    final countSuffix = checkins.length > 1 ? ' \u00b7 ${checkins.length}条记录' : '';
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xLarge)),
       ),
@@ -226,27 +222,28 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header: date + weekday + close button
+              // Header: date + close button
               Row(
                 children: [
                   Container(
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: quadrantColor,
+                      color: AppColors.quadrantColor(firstCheckin.quadrant),
                       shape: BoxShape.circle,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    '${checkin.checkedAt.year}年${checkin.checkedAt.month}月${checkin.checkedAt.day}日 $weekday',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
+                  Expanded(
+                    child: Text(
+                      '$dateTitle$countSuffix',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDark,
+                      ),
                     ),
                   ),
-                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close, color: AppColors.textSecondary),
                     onPressed: () => Navigator.of(ctx).pop(),
@@ -254,66 +251,107 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
-              // Emotion emoji + label
-              Text(
-                '${emotion?.emoji ?? ""} ${checkin.emotionLabel}',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textDark,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              // Context tag (icon + text)
-              Row(
-                children: [
-                  if (contextIcon.isNotEmpty)
-                    Text(contextIcon, style: const TextStyle(fontSize: 16)),
-                  if (contextIcon.isNotEmpty)
-                    const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    '场景: $contextLabel',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              // Note (if any)
-              if (checkin.note != null && checkin.note!.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.md),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBackground,
-                    borderRadius: BorderRadius.circular(AppRadius.medium),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '备注',
-                        style: TextStyle(
+              // Record list (sorted by created_at descending, newest first)
+              ...checkins.asMap().entries.map((entry) {
+                final index = entry.key;
+                final checkin = entry.value;
+                final emotion = EmotionData.findEmotionByLabel(checkin.emotionLabel);
+                final contextOption = EmotionData.contextOptions
+                    .where((c) => c.key == checkin.contextTag)
+                    .toList();
+                final contextLabel = contextOption.isNotEmpty
+                    ? contextOption.first.label
+                    : checkin.contextTag;
+                final contextIcon = contextOption.isNotEmpty
+                    ? contextOption.first.icon
+                    : '';
+                final quadrantColor = AppColors.quadrantColor(checkin.quadrant);
+
+                // Extract time from created_at
+                final timeStr = checkin.createdAt != null
+                    ? '${checkin.createdAt!.hour.toString().padLeft(2, '0')}:${checkin.createdAt!.minute.toString().padLeft(2, '0')}'
+                    : '';
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (index > 0)
+                      const Divider(height: 1, color: AppColors.divider),
+                    if (index > 0)
+                      const SizedBox(height: AppSpacing.md),
+                    // Time label (if available)
+                    if (timeStr.isNotEmpty)
+                      Text(
+                        timeStr,
+                        style: const TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
+                          color: AppColors.textHint,
                         ),
                       ),
+                    if (timeStr.isNotEmpty)
                       const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        checkin.note!,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textDark,
+                    // Emotion row: color dot + emoji + label
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: quadrantColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text(
+                          '${emotion?.emoji ?? ""} ${checkin.emotionLabel}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    // Context tag
+                    Row(
+                      children: [
+                        if (contextIcon.isNotEmpty)
+                          Text(contextIcon, style: const TextStyle(fontSize: 14)),
+                        if (contextIcon.isNotEmpty)
+                          const SizedBox(width: AppSpacing.xs),
+                        Text(
+                          '场景: $contextLabel',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Note (if any)
+                    if (checkin.note != null && checkin.note!.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardBackground,
+                          borderRadius: BorderRadius.circular(AppRadius.small),
+                        ),
+                        child: Text(
+                          checkin.note!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textDark,
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                );
+              }),
             ],
           ),
         );

@@ -41,9 +41,10 @@ class HomeScreen extends ConsumerWidget {
             }
 
             final greeting = _getGreeting();
-            final todayCheckin = todayCheckinAsync.valueOrNull;
+            final todayCheckins = todayCheckinAsync.valueOrNull ?? [];
             final weekCheckins = weekCheckinsAsync.valueOrNull ?? [];
-            final hasCheckedIn = todayCheckin != null;
+            final hasCheckedIn = todayCheckins.isNotEmpty;
+            final latestCheckin = todayCheckins.isNotEmpty ? todayCheckins.first : null;
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(AppSpacing.lg),
@@ -86,7 +87,7 @@ class HomeScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.lg),
 
                   // Main check-in card
-                  _buildCheckinCard(context, hasCheckedIn, todayCheckin),
+                  _buildCheckinCard(context, hasCheckedIn, latestCheckin, todayCheckins.length),
                   const SizedBox(height: AppSpacing.lg),
 
                   // Weekly mood index card
@@ -101,7 +102,17 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildCheckinCard(
-      BuildContext context, bool hasCheckedIn, Checkin? todayCheckin) {
+      BuildContext context, bool hasCheckedIn, Checkin? latestCheckin, int checkinCount) {
+    // Button text logic
+    String buttonText;
+    if (!hasCheckedIn) {
+      buttonText = '点击记录';
+    } else if (checkinCount == 1) {
+      buttonText = '再记一次';
+    } else {
+      buttonText = '再记一次（今日第$checkinCount次）';
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -120,9 +131,9 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.xl),
-          // Large circle button
+          // Large circle button — always clickable
           GestureDetector(
-            onTap: hasCheckedIn ? null : () => context.go('/checkin'),
+            onTap: () => context.go('/checkin'),
             child: Container(
               width: 140,
               height: 140,
@@ -130,7 +141,7 @@ class HomeScreen extends ConsumerWidget {
                 shape: BoxShape.circle,
                 color: hasCheckedIn
                     ? AppColors.quadrantBgColor(
-                        todayCheckin?.quadrant ?? 'green')
+                        latestCheckin?.quadrant ?? 'green')
                     : AppColors.white,
                 boxShadow: [
                   BoxShadow(
@@ -145,21 +156,21 @@ class HomeScreen extends ConsumerWidget {
                 children: [
                   Text(
                     hasCheckedIn
-                        ? (todayCheckin != null
-                            ? _getEmotionEmoji(todayCheckin.emotionLabel)
+                        ? (latestCheckin != null
+                            ? _getEmotionEmoji(latestCheckin.emotionLabel)
                             : '\u{1F60A}')
                         : '\u{1F60A}',
                     style: const TextStyle(fontSize: 48),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    hasCheckedIn ? '已记录 \u2713' : '点击记录',
+                    buttonText,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: hasCheckedIn
                           ? AppColors.quadrantColor(
-                              todayCheckin?.quadrant ?? 'green')
+                              latestCheckin?.quadrant ?? 'green')
                           : AppColors.accent,
                     ),
                   ),
@@ -170,7 +181,7 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.md),
           Text(
             hasCheckedIn
-                ? '今天的心情已经记录好啦'
+                ? '心情变了？随时可以再记一次'
                 : '点击太阳记录你的心情瞬间',
             style: const TextStyle(
               fontSize: 13,
@@ -183,10 +194,10 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildWeekCard(BuildContext context, List<Checkin> weekCheckins) {
-    // Build a map of weekday -> checkin
-    final weekMap = <int, Checkin>{};
+    // Build a map of weekday -> list of checkins
+    final weekMap = <int, List<Checkin>>{};
     for (final c in weekCheckins) {
-      weekMap[c.checkedAt.weekday] = c;
+      weekMap.putIfAbsent(c.checkedAt.weekday, () => []).add(c);
     }
 
     final now = DateTime.now();
@@ -248,7 +259,7 @@ class HomeScreen extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(7, (index) {
               final weekday = index + 1; // 1=Monday
-              final checkin = weekMap[weekday];
+              final dayCheckins = weekMap[weekday] ?? [];
               final isToday = weekday == todayWeekday;
               final isFuture = weekday > todayWeekday;
 
@@ -260,18 +271,18 @@ class HomeScreen extends ConsumerWidget {
                     height: 40,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: checkin != null
-                          ? AppColors.quadrantBgColor(checkin.quadrant)
+                      color: dayCheckins.length == 1
+                          ? AppColors.quadrantBgColor(dayCheckins.first.quadrant)
                           : (isFuture
                               ? AppColors.cardBackground
-                              : null),
-                      border: (isToday && checkin == null)
+                              : (dayCheckins.isEmpty ? null : AppColors.cardBackground)),
+                      border: (isToday && dayCheckins.isEmpty)
                           ? Border.all(
                               color: AppColors.primary,
                               width: 1.5,
                               strokeAlign: BorderSide.strokeAlignOutside,
                             )
-                          : (checkin == null && !isFuture
+                          : (dayCheckins.isEmpty && !isFuture
                               ? Border.all(
                                   color: AppColors.divider,
                                   width: 1,
@@ -279,18 +290,20 @@ class HomeScreen extends ConsumerWidget {
                               : null),
                     ),
                     child: Center(
-                      child: checkin != null
+                      child: dayCheckins.length == 1
                           ? Text(
-                              _getEmotionEmoji(checkin.emotionLabel),
+                              _getEmotionEmoji(dayCheckins.first.emotionLabel),
                               style: const TextStyle(fontSize: 20),
                             )
-                          : (isToday
-                              ? const Icon(
-                                  Icons.add,
-                                  size: 18,
-                                  color: AppColors.primary,
-                                )
-                              : null),
+                          : dayCheckins.length >= 2
+                              ? _buildMultiColorDots(dayCheckins)
+                              : (isToday
+                                  ? const Icon(
+                                      Icons.add,
+                                      size: 18,
+                                      color: AppColors.primary,
+                                    )
+                                  : null),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -311,6 +324,27 @@ class HomeScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// Build multi-color dots for days with 2+ checkins
+  Widget _buildMultiColorDots(List<Checkin> checkins) {
+    // Take at most 3 (newest first, already sorted by provider)
+    final displayCheckins = checkins.take(3).toList();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: displayCheckins.map((c) {
+        return Container(
+          width: 12,
+          height: 12,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            color: AppColors.quadrantColor(c.quadrant),
+            borderRadius: BorderRadius.circular(3),
+          ),
+        );
+      }).toList(),
     );
   }
 

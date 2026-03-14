@@ -203,6 +203,7 @@ class DashboardScreen extends ConsumerWidget {
     }
 
     final total = todayCheckins.length;
+    final studentCount = todayCheckins.map((c) => c.studentId).toSet().length;
 
     // Calculate percentages
     String pct(int count) {
@@ -281,7 +282,7 @@ class DashboardScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '$total',
+                      '$studentCount',
                       style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -289,10 +290,17 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                     ),
                     const Text(
-                      '总签到',
+                      '人打卡',
                       style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,
+                      ),
+                    ),
+                    Text(
+                      '共$total条记录',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textHint,
                       ),
                     ),
                   ],
@@ -467,12 +475,26 @@ class DashboardScreen extends ConsumerWidget {
 
     // Sort by date descending
     final sorted = List<Checkin>.from(checkins)
-      ..sort((a, b) => b.checkedAt.compareTo(a.checkedAt));
+      ..sort((a, b) {
+        final d = b.checkedAt.compareTo(a.checkedAt);
+        return d != 0
+            ? d
+            : (b.createdAt ?? DateTime(0))
+                .compareTo(a.createdAt ?? DateTime(0));
+      });
+
+    // 按日期去重：每个学生每天只保留第一条（列表已按created_at倒序，第一条即最新）
+    final seen = <String>{};
+    final deduped = <Checkin>[];
+    for (final c in sorted) {
+      final key = '${c.studentId}_${c.checkedAt.year}-${c.checkedAt.month}-${c.checkedAt.day}';
+      if (seen.add(key)) deduped.add(c);
+    }
 
     int consecutive = 0;
     DateTime? previousDate;
 
-    for (final checkin in sorted) {
+    for (final checkin in deduped) {
       if (checkin.quadrant == 'blue') {
         if (previousDate == null) {
           consecutive = 1;

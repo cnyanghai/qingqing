@@ -155,8 +155,8 @@ class SupabaseService {
     }
   }
 
-  /// Get today's check-in for a student
-  Future<Checkin?> getTodayCheckin(String studentId) async {
+  /// Get today's check-ins for a student (multiple per day)
+  Future<List<Checkin>> getTodayCheckins(String studentId) async {
     try {
       final today = _formatDate(DateTime.now());
       final data = await _client
@@ -164,9 +164,8 @@ class SupabaseService {
           .select()
           .eq('student_id', studentId)
           .eq('checked_at', today)
-          .maybeSingle();
-      if (data == null) return null;
-      return Checkin.fromJson(data);
+          .order('created_at', ascending: false);
+      return (data as List).map((e) => Checkin.fromJson(e)).toList();
     } catch (e) {
       throw Exception('获取今日记录失败: $e');
     }
