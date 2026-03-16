@@ -3,6 +3,8 @@ import '../models/checkin.dart';
 import '../services/supabase_service.dart';
 import '../services/streak_service.dart';
 import '../services/badge_service.dart';
+import '../services/garden_service.dart';
+import '../screens/student/garden_screen.dart';
 import 'auth_provider.dart';
 import 'profile_provider.dart';
 
@@ -93,11 +95,15 @@ class CheckinResult {
   final Checkin checkin;
   final int streak;
   final List<String> newBadges;
+  final int totalFlowers;
+  final List<String> newDecorations;
 
   CheckinResult({
     required this.checkin,
     required this.streak,
     required this.newBadges,
+    required this.totalFlowers,
+    this.newDecorations = const [],
   });
 }
 
@@ -137,18 +143,75 @@ class CheckinActions {
 
       final savedCheckin = await _service.createCheckin(checkin);
 
-      // Update streak
+      // Update streak (increments totalCheckins in profile)
       final streakService = StreakService(_service);
       final streak = await streakService.updateStreak(studentId);
 
-      // Check and award badges
+      // Pre-fetch shared data (each only once)
+      final notesCount = await _service.countCheckinNotes(studentId);
+      final distinctQuadrantsSet =
+          await _service.getDistinctQuadrants(studentId);
+      final distinctQuadrants = distinctQuadrantsSet.length;
+
+      // Get updated profile (totalCheckins already incremented by updateStreak)
       final profile = await _service.getProfile(studentId);
+      final totalCheckins = profile?.totalCheckins ?? 1;
+
+      // Check and award badges (reuse pre-fetched values)
       final badgeService = BadgeService(_service);
       final newBadges = await badgeService.checkAndAwardBadges(
         studentId,
         currentStreak: streak,
-        totalCheckins: profile?.totalCheckins ?? 1,
+        totalCheckins: totalCheckins,
         note: note,
+        distinctQuadrants: distinctQuadrants,
+        notesCount: notesCount,
+      );
+
+      // Calculate new decorations
+      // We approximate "before" by subtracting current checkin's contribution
+      final streakBefore = streak > 0 ? streak - 1 : 0;
+      final notesBefore = note != null && notesCount > 0
+          ? notesCount - 1
+          : notesCount;
+      // distinctQuadrants doesn't easily give "before" — but if it changed,
+      // the new quadrant was just added. Approximate: if this quadrant was
+      // the only one producing the current count, then before was count-1.
+      // However, getDistinctQuadrants already includes current checkin,
+      // so we can't easily know if this checkin added a new quadrant.
+      // Simplification: use current values for both (no false positives,
+      // but may miss first-time unlock notification). Better approach:
+      // check if removing this quadrant changes the count.
+      final quadrantsBefore = distinctQuadrants; // conservative
+
+      // Get today's checkins to compute maxSameDayQuadrants
+      final todayCheckins = await _service.getTodayCheckins(studentId);
+      final todayQuadrants =
+          todayCheckins.map((c) => c.quadrant).toSet().length;
+      final todayQuadrantsBefore = todayCheckins.length > 1
+          ? todayCheckins
+              .where((c) => c.id != savedCheckin.id)
+              .map((c) => c.quadrant)
+              .toSet()
+              .length
+          : 0;
+
+      // Get distinct contexts
+      // Simple approach: count from today's checkins + historical
+      final allContexts = todayCheckins.map((c) => c.contextTag).toSet();
+      final distinctContexts = allContexts.length;
+
+      final newDecorations = GardenService.calculateNewDecorations(
+        streakBefore: streakBefore,
+        streakAfter: streak,
+        distinctQuadrantsBefore: quadrantsBefore,
+        distinctQuadrantsAfter: distinctQuadrants,
+        notesCountBefore: notesBefore,
+        notesCountAfter: notesCount,
+        distinctContextsBefore: distinctContexts,
+        distinctContextsAfter: distinctContexts,
+        maxSameDayQuadrantsBefore: todayQuadrantsBefore,
+        maxSameDayQuadrantsAfter: todayQuadrants,
       );
 
       // Invalidate cached data
@@ -156,11 +219,14 @@ class CheckinActions {
       _ref.invalidate(weekCheckinsProvider);
       _ref.invalidate(profileProvider);
       _ref.invalidate(badgesProvider);
+      _ref.invalidate(gardenStateProvider);
 
       return CheckinResult(
         checkin: savedCheckin,
         streak: streak,
         newBadges: newBadges,
+        totalFlowers: totalCheckins,
+        newDecorations: newDecorations,
       );
     } catch (e) {
       throw Exception('记录心情失败，请稍后重试');

@@ -10,11 +10,17 @@ class BadgeService {
 
   /// Check all badge conditions and award any earned badges.
   /// Returns list of newly earned badge keys.
+  ///
+  /// [distinctQuadrants] and [notesCount] are optional pre-fetched values.
+  /// If provided, the service will use them instead of querying the DB,
+  /// avoiding duplicate queries when the caller has already fetched these.
   Future<List<String>> checkAndAwardBadges(
     String studentId, {
     required int currentStreak,
     required int totalCheckins,
     String? note,
+    int? distinctQuadrants,
+    int? notesCount,
   }) async {
     final newBadges = <String>[];
     try {
@@ -44,9 +50,9 @@ class BadgeService {
 
       // explorer: all 4 quadrants recorded
       if (!earnedKeys.contains('explorer')) {
-        final quadrants =
-            await _supabaseService.getDistinctQuadrants(studentId);
-        if (quadrants.length >= 4) {
+        final qCount = distinctQuadrants ??
+            (await _supabaseService.getDistinctQuadrants(studentId)).length;
+        if (qCount >= 4) {
           final badge =
               await _supabaseService.awardBadge(studentId, 'explorer');
           if (badge != null) newBadges.add('explorer');
@@ -55,9 +61,9 @@ class BadgeService {
 
       // writer: 10 or more notes written
       if (!earnedKeys.contains('writer')) {
-        final noteCount =
+        final nCount = notesCount ??
             await _supabaseService.countCheckinNotes(studentId);
-        if (noteCount >= 10) {
+        if (nCount >= 10) {
           final badge =
               await _supabaseService.awardBadge(studentId, 'writer');
           if (badge != null) newBadges.add('writer');

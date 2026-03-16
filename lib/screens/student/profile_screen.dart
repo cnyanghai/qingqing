@@ -98,7 +98,7 @@ class ProfileScreen extends ConsumerWidget {
                             : '',
                         style: TextStyle(
                           fontSize: 14,
-                          color: AppColors.white.withOpacity(0.8),
+                          color: AppColors.white.withValues(alpha:0.8),
                         ),
                       ),
                     ],
@@ -120,7 +120,7 @@ class ProfileScreen extends ConsumerWidget {
                           BorderRadius.circular(AppRadius.large),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
+                          color: Colors.black.withValues(alpha:0.06),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -265,7 +265,7 @@ class ProfileScreen extends ConsumerWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isEarned
-                  ? AppColors.accent.withOpacity(0.15)
+                  ? AppColors.accent.withValues(alpha:0.15)
                   : AppColors.cardBackground,
               border: Border.all(
                 color: isEarned ? AppColors.accent : AppColors.divider,

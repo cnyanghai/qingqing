@@ -35,7 +35,7 @@ class EmotionChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.large),
           border: isSelected
               ? Border.all(color: borderColor, width: 2)
-              : Border.all(color: borderColor.withOpacity(0.3), width: 1),
+              : Border.all(color: borderColor.withValues(alpha: 0.3), width: 1),
         ),
         child: Row(
           children: [

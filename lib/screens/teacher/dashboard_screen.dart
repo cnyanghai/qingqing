@@ -212,6 +212,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
                   const SizedBox(height: AppSpacing.lg),
 
+                  // Class garden entry
+                  _buildClassGardenEntry(context),
+                  const SizedBox(height: AppSpacing.lg),
+
                   // Weekly trend
                   const Text(
                     '本周情绪趋势',
@@ -348,6 +352,58 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Widget _buildClassGardenEntry(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.push('/teacher/class-garden'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFC8E6C9), Color(0xFFE8F5E9)],
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.large),
+        ),
+        child: Row(
+          children: [
+            const Text(
+              '\u{1F33B}', // sunflower
+              style: TextStyle(fontSize: 32),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '班级花园',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    '查看全班同学的情绪花园',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPieChartCard(List<Checkin> todayCheckins) {
     // Count by quadrant
     final counts = <String, int>{
@@ -414,7 +470,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         borderRadius: BorderRadius.circular(AppRadius.large),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -695,7 +751,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         borderRadius: BorderRadius.circular(AppRadius.large),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),

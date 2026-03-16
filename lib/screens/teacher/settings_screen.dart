@@ -65,7 +65,7 @@ class TeacherSettingsScreen extends ConsumerWidget {
                           BorderRadius.circular(AppRadius.large),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
+                          color: Colors.black.withValues(alpha:0.03),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -110,7 +110,7 @@ class TeacherSettingsScreen extends ConsumerWidget {
                           BorderRadius.circular(AppRadius.large),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
+                          color: Colors.black.withValues(alpha:0.03),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -140,6 +140,23 @@ class TeacherSettingsScreen extends ConsumerWidget {
                     ),
                   );
                 },
+              ),
+
+              const SizedBox(height: AppSpacing.md),
+
+              // Change password entry
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showChangePasswordDialog(context, ref),
+                  icon: const Icon(Icons.lock_outline, size: 20),
+                  label: const Text('修改密码'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
               ),
 
               const SizedBox(height: AppSpacing.md),
@@ -212,6 +229,133 @@ class TeacherSettingsScreen extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+
+  void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
+    final currentPwController = TextEditingController();
+    final newPwController = TextEditingController();
+    final confirmPwController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.large),
+              ),
+              title: const Text('修改密码'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: currentPwController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: '当前密码',
+                        hintText: '请输入当前密码',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    TextField(
+                      controller: newPwController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: '新密码',
+                        hintText: '至少6位',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    TextField(
+                      controller: confirmPwController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: '确认新密码',
+                        hintText: '再次输入新密码',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final currentPw = currentPwController.text;
+                    final newPw = newPwController.text;
+                    final confirmPw = confirmPwController.text;
+
+                    // Validation
+                    if (currentPw.isEmpty ||
+                        newPw.isEmpty ||
+                        confirmPw.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('请填写所有字段')),
+                      );
+                      return;
+                    }
+                    if (newPw.length < 6) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('新密码至少6位')),
+                      );
+                      return;
+                    }
+                    if (newPw != confirmPw) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('两次输入的新密码不一致')),
+                      );
+                      return;
+                    }
+
+                    try {
+                      final service = ref.read(supabaseServiceProvider);
+                      final client = ref.read(supabaseClientProvider);
+                      final email =
+                          client.auth.currentUser?.email ?? '';
+
+                      // Verify current password by signing in
+                      await service.signInWithEmail(email, currentPw);
+
+                      // Update password
+                      await service.updatePassword(newPw);
+
+                      if (ctx.mounted) {
+                        Navigator.of(ctx).pop();
+                      }
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('密码修改成功')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              e.toString().contains('Invalid login')
+                                  ? '当前密码错误'
+                                  : '修改失败，请稍后重试',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.medium),
+                    ),
+                  ),
+                  child: const Text('确认修改'),
+                ),
+              ],
+            );
+      },
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
 import '../../models/emotion.dart';
 import '../../models/badge.dart' as app_badge;
+import '../../models/garden.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/checkin_provider.dart';
@@ -41,6 +42,8 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
   // Step 4 state (results)
   int _resultStreak = 0;
   List<String> _resultNewBadges = [];
+  int _resultTotalFlowers = 0;
+  List<String> _resultNewDecorations = [];
   bool _isSubmitting = false;
 
   @override
@@ -103,6 +106,8 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
       setState(() {
         _resultStreak = result.streak;
         _resultNewBadges = result.newBadges;
+        _resultTotalFlowers = result.totalFlowers;
+        _resultNewDecorations = result.newDecorations;
         _isSubmitting = false;
       });
 
@@ -255,7 +260,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 disabledBackgroundColor:
-                    AppColors.primary.withOpacity(0.5),
+                    AppColors.primary.withValues(alpha:0.5),
               ),
               child: const Text('继续'),
             ),
@@ -399,7 +404,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 disabledBackgroundColor:
-                    AppColors.primary.withOpacity(0.5),
+                    AppColors.primary.withValues(alpha:0.5),
               ),
               child: const Text('下一步'),
             ),
@@ -581,7 +586,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accent,
                 disabledBackgroundColor:
-                    AppColors.accent.withOpacity(0.5),
+                    AppColors.accent.withValues(alpha:0.5),
               ),
               child: _isSubmitting
                   ? const SizedBox(
@@ -609,9 +614,9 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
 
   // ============ Step 4: Success ============
   Widget _buildStep4() {
-    final emotionItem =
-        EmotionData.findEmotionByLabel(_selectedEmotion ?? '');
-    final emoji = emotionItem?.emoji ?? '\u{1F60A}';
+    final flowerConfig = GardenConfig.getFlower(_selectedQuadrant ?? '');
+    final flowerEmoji = flowerConfig?.emoji ?? '\u{1F33B}';
+    final flowerName = flowerConfig?.name ?? '花';
 
     return Container(
       width: double.infinity,
@@ -655,24 +660,24 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
             ),
           ),
           const Spacer(flex: 1),
-          // Big emoji
-          Text(
-            emoji,
-            style: const TextStyle(fontSize: 80),
+          // Flower planting animation
+          _FlowerPlantAnimation(
+            flowerEmoji: flowerEmoji,
+            quadrantColor: flowerConfig?.color ?? AppColors.moodGreen,
           ),
           const SizedBox(height: AppSpacing.lg),
-          const Text(
-            '记录成功！',
-            style: TextStyle(
-              fontSize: 24,
+          Text(
+            '你种下了一朵$flowerName! $flowerEmoji',
+            style: const TextStyle(
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: AppColors.textDark,
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          const Text(
-            '今天的感觉也被好好收藏了',
-            style: TextStyle(
+          Text(
+            '你的花园里现在有$_resultTotalFlowers朵花了',
+            style: const TextStyle(
               fontSize: 14,
               color: AppColors.textSecondary,
             ),
@@ -683,7 +688,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
           const SizedBox(height: AppSpacing.md),
           // New badges
           if (_resultNewBadges.isNotEmpty)
-            ...  _resultNewBadges.map((badgeKey) {
+            ..._resultNewBadges.map((badgeKey) {
               final info = app_badge.Badge.allBadges[badgeKey];
               if (info == null) return const SizedBox.shrink();
               return Container(
@@ -698,7 +703,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                       BorderRadius.circular(AppRadius.large),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -709,14 +714,14 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                     Container(
                       width: 40,
                       height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF0F4F8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF0F4F8),
                         shape: BoxShape.circle,
                       ),
-                      child: Center(
+                      child: const Center(
                         child: Text(
                           '\u{1F3C6}',
-                          style: const TextStyle(fontSize: 20),
+                          style: TextStyle(fontSize: 20),
                         ),
                       ),
                     ),
@@ -727,7 +732,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                             CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '新徽章：${info.name}',
+                            '新徽章: ${info.name}',
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
@@ -748,6 +753,11 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                 ),
               );
             }),
+          // New decorations
+          if (_resultNewDecorations.isNotEmpty)
+            _NewDecorationsBanner(
+              decorationKeys: _resultNewDecorations,
+            ),
           const Spacer(flex: 2),
           // Return home button
           Padding(
@@ -765,6 +775,199 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 种花动画: 种子 → 花朵，带光晕扩散
+class _FlowerPlantAnimation extends StatefulWidget {
+  final String flowerEmoji;
+  final Color quadrantColor;
+
+  const _FlowerPlantAnimation({
+    required this.flowerEmoji,
+    required this.quadrantColor,
+  });
+
+  @override
+  State<_FlowerPlantAnimation> createState() =>
+      _FlowerPlantAnimationState();
+}
+
+class _FlowerPlantAnimationState extends State<_FlowerPlantAnimation>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  bool _showFlower = false;
+  double _haloSize = 0;
+  double _haloOpacity = 0.4;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+    );
+
+    // Start animation sequence
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() => _showFlower = true);
+        _controller.forward();
+        // Start halo expansion
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (mounted) {
+            setState(() {
+              _haloSize = 120;
+              _haloOpacity = 0;
+            });
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 140,
+      height: 140,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Halo effect
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 600),
+            width: _haloSize,
+            height: _haloSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: widget.quadrantColor.withValues(alpha: _haloOpacity),
+            ),
+          ),
+          // Seed → Flower transition
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            transitionBuilder: (child, animation) {
+              return ScaleTransition(scale: animation, child: child);
+            },
+            child: _showFlower
+                ? ScaleTransition(
+                    key: const ValueKey('flower'),
+                    scale: _scaleAnimation,
+                    child: Text(
+                      widget.flowerEmoji,
+                      style: const TextStyle(fontSize: 72),
+                    ),
+                  )
+                : const Text(
+                    '\u{1F331}', // seed emoji
+                    key: ValueKey('seed'),
+                    style: TextStyle(fontSize: 56),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 新装饰解锁提示（带滑入动画）
+class _NewDecorationsBanner extends StatefulWidget {
+  final List<String> decorationKeys;
+
+  const _NewDecorationsBanner({required this.decorationKeys});
+
+  @override
+  State<_NewDecorationsBanner> createState() =>
+      _NewDecorationsBannerState();
+}
+
+class _NewDecorationsBannerState extends State<_NewDecorationsBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutBack,
+    ));
+
+    // Delay 0.5s after flower animation
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(
+      position: _slideAnimation,
+      child: Column(
+        children: widget.decorationKeys.map((key) {
+          final decoration = GardenDecorations.findByKey(key);
+          if (decoration == null) return const SizedBox.shrink();
+          return Container(
+            margin: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.sm,
+            ),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.moodYellowBg,
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              border: Border.all(
+                color: AppColors.moodYellow,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  '\u{1F389}', // party emoji
+                  style: TextStyle(fontSize: 20),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  '获得新装饰: ${decoration.emoji} ${decoration.name}!',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }

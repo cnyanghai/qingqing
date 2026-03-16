@@ -422,7 +422,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     disabledBackgroundColor:
-                        AppColors.primary.withOpacity(0.5),
+                        AppColors.primary.withValues(alpha: 0.5),
                   ),
                   child: _isLoading
                       ? const SizedBox(

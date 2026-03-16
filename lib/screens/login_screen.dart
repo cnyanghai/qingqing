@@ -103,6 +103,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  void _showForgotPasswordDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text('忘记密码'),
+        content: const Text(
+          '请联系班级老师或发送邮件至 cnyanghai@icloud.com 申请重置密码',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -167,6 +188,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 onChanged: (_) => setState(() {}),
               ),
+              // Forgot password link
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () => _showForgotPasswordDialog(),
+                  child: const Text(
+                    '忘记密码？',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: AppSpacing.xl),
               // Submit
               SizedBox(
@@ -177,7 +212,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     disabledBackgroundColor:
-                        AppColors.primary.withOpacity(0.5),
+                        AppColors.primary.withValues(alpha:0.5),
                   ),
                   child: _isLoading
                       ? const SizedBox(

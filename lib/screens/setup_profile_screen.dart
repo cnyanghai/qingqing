@@ -294,7 +294,7 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
                   onPressed: _canSubmit ? _handleSubmit : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accent,
-                    disabledBackgroundColor: AppColors.accent.withOpacity(0.5),
+                    disabledBackgroundColor: AppColors.accent.withValues(alpha:0.5),
                   ),
                   child: _isLoading
                       ? const SizedBox(

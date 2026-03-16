@@ -11,6 +11,7 @@ import '../screens/student/home_screen.dart';
 import '../screens/student/checkin_flow_screen.dart';
 import '../screens/student/calendar_screen.dart';
 import '../screens/student/profile_screen.dart';
+import '../screens/student/garden_screen.dart';
 import '../screens/teacher/teacher_shell.dart';
 import '../screens/login_screen.dart';
 import '../screens/teacher/register_screen.dart';
@@ -19,6 +20,8 @@ import '../screens/teacher/student_list_screen.dart';
 import '../screens/teacher/student_detail_screen.dart';
 import '../screens/teacher/class_code_screen.dart';
 import '../screens/teacher/settings_screen.dart';
+import '../screens/teacher/analytics_screen.dart';
+import '../screens/teacher/class_garden_screen.dart';
 import '../screens/privacy_screen.dart';
 import '../screens/terms_screen.dart';
 
@@ -122,6 +125,15 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
+          // Garden tab
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/garden',
+                builder: (context, state) => const GardenScreen(),
+              ),
+            ],
+          ),
           // S7: Profile tab
           StatefulShellBranch(
             routes: [
@@ -148,6 +160,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           final code = state.extra as String? ?? '000000';
           return ClassCodeScreen(classCode: code);
         },
+      ),
+
+      // Class garden (standalone, pushed from dashboard)
+      GoRoute(
+        path: '/teacher/class-garden',
+        builder: (context, state) => const ClassGardenScreen(),
       ),
 
       // T4: Student detail (standalone)
@@ -186,14 +204,13 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Analytics tab (placeholder)
+          // Analytics tab
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: '/teacher/analytics',
-                builder: (context, state) => const Scaffold(
-                  body: Center(child: Text('分析功能即将推出')),
-                ),
+                builder: (context, state) =>
+                    const AnalyticsScreen(),
               ),
             ],
           ),

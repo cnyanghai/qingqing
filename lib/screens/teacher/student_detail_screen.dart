@@ -233,7 +233,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
         borderRadius: BorderRadius.circular(AppRadius.large),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -250,7 +250,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
               spots: spots,
               isCurved: true,
               curveSmoothness: 0.2,
-              color: AppColors.primary.withOpacity(0.3),
+              color: AppColors.primary.withValues(alpha:0.3),
               barWidth: 2,
               dotData: FlDotData(
                 show: true,
@@ -341,7 +341,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             drawVerticalLine: false,
             horizontalInterval: 1,
             getDrawingHorizontalLine: (value) => FlLine(
-              color: AppColors.divider.withOpacity(0.5),
+              color: AppColors.divider.withValues(alpha:0.5),
               strokeWidth: 1,
             ),
           ),
@@ -401,7 +401,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
         borderRadius: BorderRadius.circular(AppRadius.large),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -641,7 +641,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             borderRadius: BorderRadius.circular(AppRadius.medium),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha:0.03),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),

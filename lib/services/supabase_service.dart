@@ -51,6 +51,15 @@ class SupabaseService {
     }
   }
 
+  /// Update password for the current user
+  Future<void> updatePassword(String newPassword) async {
+    try {
+      await _client.auth.updateUser(UserAttributes(password: newPassword));
+    } catch (e) {
+      throw Exception('修改密码失败: $e');
+    }
+  }
+
   /// Sign out
   Future<void> signOut() async {
     try {
