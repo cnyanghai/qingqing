@@ -6,6 +6,7 @@ import '../../config/theme.dart';
 import '../../models/garden.dart';
 import '../../models/learning_entry.dart';
 import '../../models/profile.dart';
+import '../../models/student_message.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/checkin_provider.dart';
@@ -97,6 +98,11 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
         ref.watch(myLearningEntriesProvider).valueOrNull ?? [];
     final totalWaterCount =
         ref.watch(myTotalWaterCountProvider).valueOrNull ?? 0;
+    final myMessages =
+        ref.watch(myMessagesProvider).valueOrNull ?? [];
+    final classmates =
+        ref.watch(classmatesProvider).valueOrNull ?? [];
+    final userId = ref.watch(currentUserIdProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -106,11 +112,26 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
           error: (_, __) => const Center(child: Text('加载花园失败')),
           data: (garden) => Column(
             children: [
-              // 固定高度200px的顶部场景区
+              // 固定高度200px的顶部场景区（含留言图标）
               SizedBox(
                 height: 200,
-                child: _buildUnifiedScene(
-                    context, garden, allEntries, totalWaterCount),
+                child: Stack(
+                  children: [
+                    _buildUnifiedScene(
+                        context, garden, allEntries, totalWaterCount),
+                    // 留言图标 + badge
+                    Positioned(
+                      top: AppSpacing.sm + 4,
+                      right: AppSpacing.sm + 4,
+                      child: _buildMessageBadge(
+                        context,
+                        myMessages,
+                        classmates,
+                        userId,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               // TabBar
               Container(
@@ -228,6 +249,271 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
         ),
       ),
     );
+  }
+
+  /// 留言图标 + 未读数 badge
+  Widget _buildMessageBadge(
+    BuildContext context,
+    List<StudentMessage> messages,
+    List<Profile> classmates,
+    String? userId,
+  ) {
+    final messageCount = messages.length;
+
+    return GestureDetector(
+      onTap: () => _showMessageSheet(context, messages, classmates, userId),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: AppColors.white.withValues(alpha: 0.85),
+          shape: BoxShape.circle,
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Icon(
+              Icons.mail_outline,
+              size: 22,
+              color: AppColors.primary,
+            ),
+            if (messageCount > 0)
+              Positioned(
+                top: -6,
+                right: -6,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    color: AppColors.error,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    messageCount > 99 ? '99+' : '$messageCount',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 显示留言列表 BottomSheet
+  void _showMessageSheet(
+    BuildContext context,
+    List<StudentMessage> messages,
+    List<Profile> classmates,
+    String? userId,
+  ) {
+    // 最多展示最近10条
+    final displayMessages =
+        messages.length > 10 ? messages.sublist(0, 10) : messages;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.8,
+        expand: false,
+        builder: (_, scrollController) => SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    Text(
+                      '\u{1F4DD} 留言 \u{00B7} ${messages.length}条',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => Navigator.of(ctx).pop(),
+                      child: const Icon(
+                        Icons.close,
+                        color: AppColors.textHint,
+                        size: 22,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: displayMessages.isEmpty
+                    ? const Center(
+                        child: Text(
+                          '还没有收到留言',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        itemCount: displayMessages.length,
+                        itemBuilder: (_, index) {
+                          final msg = displayMessages[index];
+                          final author = classmates
+                              .where((c) => c.id == msg.authorId)
+                              .firstOrNull;
+                          final authorName =
+                              author?.nickname ?? '同学';
+                          final authorAvatarKey =
+                              author?.avatarKey ?? 'cat';
+                          final timeStr =
+                              _formatMessageTime(msg.createdAt);
+
+                          // 目标学生是自己的，可以删除
+                          final canDelete = userId != null &&
+                              msg.targetStudentId == userId;
+
+                          return Container(
+                            margin: const EdgeInsets.only(
+                                bottom: AppSpacing.sm),
+                            padding:
+                                const EdgeInsets.all(AppSpacing.sm),
+                            decoration: BoxDecoration(
+                              color: AppColors.white,
+                              borderRadius: BorderRadius.circular(
+                                  AppRadius.medium),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black
+                                      .withValues(alpha: 0.03),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                AvatarCircle(
+                                  avatarKey: authorAvatarKey,
+                                  size: 32,
+                                ),
+                                const SizedBox(width: AppSpacing.sm),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            authorName,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight:
+                                                  FontWeight.w600,
+                                              color:
+                                                  AppColors.textDark,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          Text(
+                                            timeStr,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color:
+                                                  AppColors.textHint,
+                                            ),
+                                          ),
+                                          if (canDelete)
+                                            GestureDetector(
+                                              onTap: () async {
+                                                Navigator.of(ctx)
+                                                    .pop();
+                                                await _deleteMyMessage(
+                                                    msg.id);
+                                              },
+                                              child: const Padding(
+                                                padding:
+                                                    EdgeInsets.only(
+                                                        left: 4),
+                                                child: Icon(
+                                                  Icons.close,
+                                                  size: 16,
+                                                  color: AppColors
+                                                      .textHint,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        msg.content,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: AppColors.textDark,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 删除收到的留言
+  Future<void> _deleteMyMessage(String messageId) async {
+    try {
+      final service = ref.read(supabaseServiceProvider);
+      await service.deleteMessage(messageId);
+      ref.invalidate(myMessagesProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('删除留言失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 格式化留言时间
+  String _formatMessageTime(DateTime? dateTime) {
+    if (dateTime == null) return '';
+    final now = DateTime.now();
+    final diff = now.difference(dateTime);
+
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+    if (diff.inHours < 24) return '${diff.inHours}小时前';
+    if (diff.inDays < 7) return '${diff.inDays}天前';
+
+    return '${dateTime.month}/${dateTime.day}';
   }
 
   /// 缩小版花朵（最近20朵，分布在左半侧）

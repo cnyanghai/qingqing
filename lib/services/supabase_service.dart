@@ -6,6 +6,7 @@ import '../models/checkin.dart';
 import '../models/badge.dart';
 import '../models/learning_entry.dart';
 import '../models/water_record.dart';
+import '../models/student_message.dart';
 
 /// Central Supabase service for all database operations
 class SupabaseService {
@@ -596,7 +597,8 @@ class SupabaseService {
   ///   if (e.code == '23505') { /* 今天已浇过 */ }
   /// }
   Future<WaterRecord> waterTree(
-      String fromStudentId, String toStudentId, String classroomId) async {
+      String fromStudentId, String toStudentId, String classroomId,
+      {String? message}) async {
     try {
       final data = await _client
           .from('water_records')
@@ -604,6 +606,7 @@ class SupabaseService {
             'from_student_id': fromStudentId,
             'to_student_id': toStudentId,
             'classroom_id': classroomId,
+            if (message != null && message.isNotEmpty) 'message': message,
           })
           .select()
           .single();
@@ -708,6 +711,65 @@ class SupabaseService {
       return (data as List).map((e) => LearningEntry.fromJson(e)).toList();
     } catch (e) {
       throw Exception('获取学生学习记录失败: $e');
+    }
+  }
+
+  // ---------- Water Records with messages (浇水留言) ----------
+
+  /// 获取某学生收到的带留言的浇水记录（最新在前，最多20条）
+  Future<List<WaterRecord>> getWaterMessagesForStudent(
+      String toStudentId) async {
+    try {
+      final data = await _client
+          .from('water_records')
+          .select()
+          .eq('to_student_id', toStudentId)
+          .not('message', 'is', null)
+          .order('created_at', ascending: false)
+          .limit(20);
+      return (data as List).map((e) => WaterRecord.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('获取浇水留言失败: $e');
+    }
+  }
+
+  // ---------- Student Messages (同学留言板) ----------
+
+  /// 发送留言
+  Future<StudentMessage> sendMessage(StudentMessage msg) async {
+    try {
+      final data = await _client
+          .from('student_messages')
+          .insert(msg.toJson())
+          .select()
+          .single();
+      return StudentMessage.fromJson(data);
+    } catch (e) {
+      throw Exception('发送留言失败: $e');
+    }
+  }
+
+  /// 获取某个学生收到的留言（最新在前）
+  Future<List<StudentMessage>> getStudentMessages(
+      String targetStudentId) async {
+    try {
+      final data = await _client
+          .from('student_messages')
+          .select()
+          .eq('target_student_id', targetStudentId)
+          .order('created_at', ascending: false);
+      return (data as List).map((e) => StudentMessage.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('获取留言失败: $e');
+    }
+  }
+
+  /// 删除留言
+  Future<void> deleteMessage(String messageId) async {
+    try {
+      await _client.from('student_messages').delete().eq('id', messageId);
+    } catch (e) {
+      throw Exception('删除留言失败: $e');
     }
   }
 

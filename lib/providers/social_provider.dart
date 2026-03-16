@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/profile.dart';
 import '../models/learning_entry.dart';
 import '../models/water_record.dart';
+import '../models/student_message.dart';
 import 'auth_provider.dart';
 import 'profile_provider.dart';
 
@@ -39,4 +40,20 @@ final myTotalWaterCountProvider = FutureProvider<int>((ref) async {
   if (userId == null) return 0;
   final service = ref.watch(supabaseServiceProvider);
   return await service.getTotalWaterCount(userId);
+});
+
+/// 某同学收到的留言
+final studentMessagesProvider =
+    FutureProvider.family<List<StudentMessage>, String>(
+        (ref, targetStudentId) async {
+  final service = ref.watch(supabaseServiceProvider);
+  return await service.getStudentMessages(targetStudentId);
+});
+
+/// 我收到的留言
+final myMessagesProvider = FutureProvider<List<StudentMessage>>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return [];
+  final service = ref.watch(supabaseServiceProvider);
+  return await service.getStudentMessages(userId);
 });

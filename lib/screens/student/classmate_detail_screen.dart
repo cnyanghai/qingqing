@@ -6,11 +6,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/theme.dart';
 import '../../models/profile.dart';
 import '../../models/learning_entry.dart';
+import '../../models/water_record.dart';
+import '../../models/student_message.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/social_provider.dart';
+import '../../widgets/avatar_picker.dart';
 
-/// 同学详情页 — 智慧树只读视图 + 浇水
+/// 同学详情页 — 智慧树只读视图 + 浇水 + 留言板
 class ClassmateDetailScreen extends ConsumerStatefulWidget {
   final String classmateId;
 
@@ -32,6 +35,14 @@ class _ClassmateDetailScreenState
   bool _waterLoading = false;
   int _totalWaterCount = 0;
 
+  // 浇水留言列表
+  List<WaterRecord> _waterMessages = [];
+
+  // 留言板
+  List<StudentMessage> _messages = [];
+  final TextEditingController _messageController = TextEditingController();
+  bool _sendingMessage = false;
+
   // 浇水动画
   bool _showWaterDrop = false;
   double _treeScale = 1.0;
@@ -40,6 +51,12 @@ class _ClassmateDetailScreenState
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -52,6 +69,16 @@ class _ClassmateDetailScreenState
           await service.getStudentLearningEntries(widget.classmateId);
       final totalWater =
           await service.getTotalWaterCount(widget.classmateId);
+      final waterMessages =
+          await service.getWaterMessagesForStudent(widget.classmateId);
+
+      // 加载留言板
+      List<StudentMessage> messages = [];
+      try {
+        messages = await service.getStudentMessages(widget.classmateId);
+      } catch (_) {
+        // 留言板加载失败不影响整体页面
+      }
 
       bool watered = false;
       if (userId != null) {
@@ -65,6 +92,8 @@ class _ClassmateDetailScreenState
           _entries = entries;
           _totalWaterCount = totalWater;
           _hasWatered = watered;
+          _waterMessages = waterMessages;
+          _messages = messages;
           _loading = false;
         });
       }
@@ -78,7 +107,125 @@ class _ClassmateDetailScreenState
     }
   }
 
-  Future<void> _doWater() async {
+  /// 弹出浇水对话框
+  void _showWaterDialog() {
+    if (_hasWatered || _waterLoading) return;
+
+    final nickname = _classmateProfile?.nickname ?? '同学';
+    String selectedText = '';
+    final textController = TextEditingController();
+
+    const presetMessages = [
+      '加油！',
+      '好厉害！',
+      '一起加油！',
+      '真棒！',
+      '你好努力！',
+      '向你学习！',
+      '太酷了！',
+      '继续坚持！',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.large),
+          ),
+          title: Text(
+            '\u{1F4A7} 给$nickname浇水',
+            style: const TextStyle(fontSize: 18),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '选一句鼓励的话：',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: presetMessages.map((msg) {
+                    final isSelected = selectedText == msg &&
+                        textController.text == msg;
+                    return ActionChip(
+                      label: Text(
+                        msg,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isSelected
+                              ? AppColors.white
+                              : AppColors.textDark,
+                        ),
+                      ),
+                      backgroundColor: isSelected
+                          ? AppColors.primary
+                          : AppColors.cardBackground,
+                      side: BorderSide.none,
+                      onPressed: () {
+                        setDialogState(() {
+                          selectedText = msg;
+                          textController.text = msg;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: textController,
+                  decoration: const InputDecoration(
+                    hintText: '写一句鼓励的话...',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  maxLines: 2,
+                  onChanged: (value) {
+                    setDialogState(() {
+                      // 如果手动修改，清除预设选中
+                      if (value != selectedText) {
+                        selectedText = '';
+                      }
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _doWater(null);
+              },
+              child: const Text('直接浇水'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final msg = textController.text.trim();
+                Navigator.of(ctx).pop();
+                _doWater(msg.isNotEmpty ? msg : null);
+              },
+              child: const Text('浇水并留言'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _doWater(String? message) async {
     if (_hasWatered || _waterLoading) return;
 
     final userId = ref.read(currentUserIdProvider);
@@ -90,7 +237,11 @@ class _ClassmateDetailScreenState
     try {
       final service = ref.read(supabaseServiceProvider);
       await service.waterTree(
-          userId, widget.classmateId, myProfile!.classroomId!);
+        userId,
+        widget.classmateId,
+        myProfile!.classroomId!,
+        message: message,
+      );
 
       // 浇水成功 — 播放动画
       if (mounted) {
@@ -100,6 +251,18 @@ class _ClassmateDetailScreenState
           _totalWaterCount++;
           _showWaterDrop = true;
         });
+
+        // 如果有留言，刷新浇水留言列表
+        if (message != null && message.isNotEmpty) {
+          try {
+            final service = ref.read(supabaseServiceProvider);
+            final waterMessages =
+                await service.getWaterMessagesForStudent(widget.classmateId);
+            if (mounted) {
+              setState(() => _waterMessages = waterMessages);
+            }
+          } catch (_) {}
+        }
 
         // 水滴下落动画
         await Future.delayed(const Duration(milliseconds: 600));
@@ -144,6 +307,72 @@ class _ClassmateDetailScreenState
     }
   }
 
+  /// 发送留言
+  Future<void> _sendMessage() async {
+    final content = _messageController.text.trim();
+    if (content.isEmpty || _sendingMessage) return;
+
+    final userId = ref.read(currentUserIdProvider);
+    final myProfile = ref.read(profileProvider).valueOrNull;
+    if (userId == null || myProfile?.classroomId == null) return;
+
+    setState(() => _sendingMessage = true);
+
+    try {
+      final service = ref.read(supabaseServiceProvider);
+      final msg = StudentMessage(
+        id: '',
+        authorId: userId,
+        targetStudentId: widget.classmateId,
+        classroomId: myProfile!.classroomId!,
+        content: content,
+      );
+      await service.sendMessage(msg);
+
+      // 清空输入框，刷新列表
+      _messageController.clear();
+      final messages =
+          await service.getStudentMessages(widget.classmateId);
+      if (mounted) {
+        setState(() {
+          _messages = messages;
+          _sendingMessage = false;
+        });
+      }
+      // 刷新provider
+      ref.invalidate(studentMessagesProvider(widget.classmateId));
+      ref.invalidate(myMessagesProvider);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sendingMessage = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送留言失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 删除留言
+  Future<void> _deleteMessage(String messageId) async {
+    try {
+      final service = ref.read(supabaseServiceProvider);
+      await service.deleteMessage(messageId);
+      final messages =
+          await service.getStudentMessages(widget.classmateId);
+      if (mounted) {
+        setState(() => _messages = messages);
+      }
+      ref.invalidate(studentMessagesProvider(widget.classmateId));
+      ref.invalidate(myMessagesProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('删除留言失败: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -179,6 +408,8 @@ class _ClassmateDetailScreenState
 
     final profile = _classmateProfile!;
     final nickname = profile.nickname;
+    final userId = ref.read(currentUserIdProvider);
+    final classmates = ref.watch(classmatesProvider).valueOrNull ?? [];
 
     // 分类学习记录
     final inProgressBooks = _entries
@@ -222,9 +453,15 @@ class _ClassmateDetailScreenState
                 ),
               ),
 
-            // 浇水按钮
+            // 浇水按钮（改为弹出Dialog）
             _buildWaterButton(nickname),
             const SizedBox(height: AppSpacing.lg),
+
+            // 浇水留言展示
+            if (_waterMessages.isNotEmpty) ...[
+              _buildWaterMessagesSection(classmates),
+              const SizedBox(height: AppSpacing.lg),
+            ],
 
             // 在读的书
             if (inProgressBooks.isNotEmpty) ...[
@@ -264,7 +501,11 @@ class _ClassmateDetailScreenState
                   );
                 }).toList(),
               ),
+              const SizedBox(height: AppSpacing.lg),
             ],
+
+            // 留言板
+            _buildMessageBoardSection(userId, classmates),
 
             const SizedBox(height: AppSpacing.xl),
           ],
@@ -431,7 +672,8 @@ class _ClassmateDetailScreenState
       width: double.infinity,
       height: 48,
       child: ElevatedButton(
-        onPressed: _hasWatered || _waterLoading ? null : _doWater,
+        onPressed:
+            _hasWatered || _waterLoading ? null : _showWaterDialog,
         style: ElevatedButton.styleFrom(
           backgroundColor:
               _hasWatered ? AppColors.divider : AppColors.primary,
@@ -456,6 +698,221 @@ class _ClassmateDetailScreenState
                 style: const TextStyle(fontSize: 16),
               ),
       ),
+    );
+  }
+
+  // ============================================================
+  // 浇水留言展示
+  // ============================================================
+
+  Widget _buildWaterMessagesSection(List<Profile> classmates) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('\u{1F4A7} 浇水留言'),
+        ...(_waterMessages).map((water) {
+          final author = classmates
+              .where((c) => c.id == water.fromStudentId)
+              .firstOrNull;
+          final authorName = author?.nickname ?? '同学';
+          final authorAvatarKey = author?.avatarKey ?? 'cat';
+          final timeStr = _formatTime(water.createdAt);
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: AppColors.moodBlueBg,
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AvatarCircle(avatarKey: authorAvatarKey, size: 32),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            authorName,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            timeStr,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textHint,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        water.message ?? '',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  // ============================================================
+  // 留言板
+  // ============================================================
+
+  Widget _buildMessageBoardSection(
+      String? userId, List<Profile> classmates) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('\u{1F4DD} 留言板'),
+
+        // 输入区
+        Container(
+          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _messageController,
+                  decoration: const InputDecoration(
+                    hintText: '写一条留言...',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              IconButton(
+                onPressed: _sendingMessage ? null : _sendMessage,
+                icon: _sendingMessage
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send, color: AppColors.primary),
+              ),
+            ],
+          ),
+        ),
+
+        // 留言列表
+        if (_messages.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Center(
+              child: Text(
+                '还没有人留言，说点什么吧~',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          )
+        else
+          ..._messages.map((msg) {
+            final author = classmates
+                .where((c) => c.id == msg.authorId)
+                .firstOrNull;
+            final authorName = author?.nickname ?? '同学';
+            final authorAvatarKey = author?.avatarKey ?? 'cat';
+            final isMyMessage = userId != null && msg.authorId == userId;
+            final timeStr = _formatTime(msg.createdAt);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AvatarCircle(avatarKey: authorAvatarKey, size: 32),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              authorName,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              timeStr,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textHint,
+                              ),
+                            ),
+                            if (isMyMessage)
+                              GestureDetector(
+                                onTap: () => _deleteMessage(msg.id),
+                                child: const Padding(
+                                  padding: EdgeInsets.only(left: 4),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: AppColors.textHint,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          msg.content,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+      ],
     );
   }
 
@@ -555,5 +1012,19 @@ class _ClassmateDetailScreenState
         ],
       ),
     );
+  }
+
+  /// 格式化时间为友好显示
+  String _formatTime(DateTime? dateTime) {
+    if (dateTime == null) return '';
+    final now = DateTime.now();
+    final diff = now.difference(dateTime);
+
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+    if (diff.inHours < 24) return '${diff.inHours}小时前';
+    if (diff.inDays < 7) return '${diff.inDays}天前';
+
+    return '${dateTime.month}/${dateTime.day}';
   }
 }

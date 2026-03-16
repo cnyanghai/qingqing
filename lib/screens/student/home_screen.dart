@@ -6,6 +6,7 @@ import '../../models/checkin.dart';
 import '../../models/learning_entry.dart';
 import '../../models/profile.dart';
 import '../../models/water_record.dart';
+import '../../models/student_message.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/checkin_provider.dart';
@@ -37,6 +38,7 @@ class HomeScreen extends ConsumerWidget {
         ref.watch(myLearningEntriesProvider).valueOrNull ?? [];
     final todayWatersAsync = ref.watch(myTodayWatersProvider);
     final classmatesAsync = ref.watch(classmatesProvider);
+    final myMessagesAsync = ref.watch(myMessagesProvider);
     final userId = ref.watch(currentUserIdProvider);
 
     return Scaffold(
@@ -103,6 +105,12 @@ class HomeScreen extends ConsumerWidget {
                   // 浇水通知条
                   _buildWaterNotification(
                     todayWatersAsync.valueOrNull ?? [],
+                    classmatesAsync.valueOrNull ?? [],
+                  ),
+
+                  // 留言通知条
+                  _buildMessageNotification(
+                    myMessagesAsync.valueOrNull ?? [],
                     classmatesAsync.valueOrNull ?? [],
                   ),
 
@@ -691,11 +699,27 @@ class HomeScreen extends ConsumerWidget {
 
     if (names.isEmpty) return const SizedBox.shrink();
 
-    final firstName = names.first;
-    final count = names.length;
-    final text = count == 1
-        ? '\u{1F4A7} 今天$firstName给你的智慧树浇了水！'
-        : '\u{1F4A7} 今天$firstName等$count位同学给你的智慧树浇了水！';
+    // 检查最新浇水是否有留言
+    final latestWithMessage = todayWaters
+        .where((w) => w.message != null && w.message!.isNotEmpty)
+        .toList();
+
+    String text;
+    if (latestWithMessage.isNotEmpty) {
+      final latestWater = latestWithMessage.first;
+      final latestAuthor = classmates
+          .where((c) => c.id == latestWater.fromStudentId)
+          .firstOrNull;
+      final authorName = latestAuthor?.nickname ?? '同学';
+      text =
+          '\u{1F4A7} $authorName给你浇水说：\u{300C}${latestWater.message}\u{300D}';
+    } else {
+      final firstName = names.first;
+      final count = names.length;
+      text = count == 1
+          ? '\u{1F4A7} 今天$firstName给你的智慧树浇了水！'
+          : '\u{1F4A7} 今天$firstName等$count位同学给你的智慧树浇了水！';
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -715,6 +739,56 @@ class HomeScreen extends ConsumerWidget {
             fontSize: 13,
             color: AppColors.textDark,
           ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageNotification(
+      List<StudentMessage> messages, List<Profile> classmates) {
+    if (messages.isEmpty) return const SizedBox.shrink();
+
+    // 筛选今天的留言
+    final now = DateTime.now();
+    final todayMessages = messages.where((m) {
+      if (m.createdAt == null) return false;
+      return m.createdAt!.year == now.year &&
+          m.createdAt!.month == now.month &&
+          m.createdAt!.day == now.day;
+    }).toList();
+
+    if (todayMessages.isEmpty) return const SizedBox.shrink();
+
+    final latest = todayMessages.first;
+    final author = classmates
+        .where((c) => c.id == latest.authorId)
+        .firstOrNull;
+    final authorName = author?.nickname ?? '同学';
+    final text =
+        '\u{1F4DD} $authorName给你留言了：\u{300C}${latest.content}\u{300D}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.moodGreenBg,
+          borderRadius: BorderRadius.circular(AppRadius.large),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.textDark,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

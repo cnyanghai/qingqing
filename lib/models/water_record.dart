@@ -6,6 +6,7 @@ class WaterRecord {
   final String classroomId;
   final DateTime wateredAt;
   final DateTime? createdAt;
+  final String? message;
 
   const WaterRecord({
     required this.id,
@@ -14,6 +15,7 @@ class WaterRecord {
     required this.classroomId,
     required this.wateredAt,
     this.createdAt,
+    this.message,
   });
 
   factory WaterRecord.fromJson(Map<String, dynamic> json) {
@@ -28,6 +30,7 @@ class WaterRecord {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
           : null,
+      message: json['message'] as String?,
     );
   }
 
@@ -37,6 +40,7 @@ class WaterRecord {
       'to_student_id': toStudentId,
       'classroom_id': classroomId,
       'watered_at': _formatDate(wateredAt),
+      if (message != null && message!.isNotEmpty) 'message': message,
     };
   }
 
