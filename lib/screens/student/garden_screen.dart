@@ -1,15 +1,19 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
 import '../../models/garden.dart';
 import '../../models/learning_entry.dart';
+import '../../models/profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/checkin_provider.dart';
 import '../../providers/learning_provider.dart';
+import '../../providers/social_provider.dart';
 import '../../services/garden_service.dart';
 import '../../widgets/add_learning_dialog.dart';
+import '../../widgets/avatar_picker.dart';
 
 /// 花园状态 Provider
 final gardenStateProvider = FutureProvider<GardenState>((ref) async {
@@ -91,6 +95,8 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
     final gardenAsync = ref.watch(gardenStateProvider);
     final allEntries =
         ref.watch(myLearningEntriesProvider).valueOrNull ?? [];
+    final totalWaterCount =
+        ref.watch(myTotalWaterCountProvider).valueOrNull ?? 0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -103,7 +109,8 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
               // 固定高度200px的顶部场景区
               SizedBox(
                 height: 200,
-                child: _buildUnifiedScene(context, garden, allEntries),
+                child: _buildUnifiedScene(
+                    context, garden, allEntries, totalWaterCount),
               ),
               // TabBar
               Container(
@@ -140,8 +147,8 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
   }
 
   /// 统一顶部场景：花朵 + 智慧树
-  Widget _buildUnifiedScene(
-      BuildContext context, GardenState garden, List<LearningEntry> entries) {
+  Widget _buildUnifiedScene(BuildContext context, GardenState garden,
+      List<LearningEntry> entries, int totalWaterCount) {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Container(
@@ -168,9 +175,31 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
             ..._buildMiniFlowers(garden, screenWidth),
             // 右侧/中央：智慧树可视化
             if (entries.isNotEmpty)
-              _buildWisdomTree(entries, screenWidth)
+              _buildWisdomTree(entries, screenWidth, totalWaterCount)
             else
-              // 如果没有学习记录：底部引导文字
+              // 浇水统计
+            if (totalWaterCount > 0)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withValues(alpha: 0.8),
+                    borderRadius:
+                        BorderRadius.circular(AppRadius.round),
+                  ),
+                  child: Text(
+                    '\u{1F4A7} 累计收到$totalWaterCount次浇水',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+            // 如果没有学习记录：底部引导文字
               Positioned(
                 bottom: 12,
                 left: 0,
@@ -236,7 +265,8 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
   }
 
   /// 智慧树可视化（Stack+Positioned+emoji）
-  Widget _buildWisdomTree(List<LearningEntry> entries, double screenWidth) {
+  Widget _buildWisdomTree(
+      List<LearningEntry> entries, double screenWidth, int totalWaterCount) {
     final treeHeight = min(150.0, 30.0 + entries.length * 5.0);
     final treeX = screenWidth * 0.6;
 
@@ -266,6 +296,16 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
                 decoration: BoxDecoration(
                   color: const Color(0xFF8D6E63),
                   borderRadius: BorderRadius.circular(3),
+                  boxShadow: totalWaterCount > 0
+                      ? [
+                          BoxShadow(
+                            color: Colors.lightBlueAccent
+                                .withValues(alpha: 0.5),
+                            blurRadius: 10,
+                            spreadRadius: 2,
+                          ),
+                        ]
+                      : null,
                 ),
               ),
             ),
@@ -619,6 +659,14 @@ class _BookshelfTabContentState extends ConsumerState<_BookshelfTabContent> {
         .where((e) => e.type == 'skill' && e.status == 'completed')
         .toList();
 
+    // 读书圈数据（在书架Tab打开时加载）
+    final classLearningAsync = ref.watch(classmateLearningProvider);
+    final classLearning = classLearningAsync.valueOrNull;
+    final classmatesAsync = ref.watch(classmatesProvider);
+    final classmates = classmatesAsync.valueOrNull ?? [];
+    final currentUserId =
+        ref.watch(currentUserIdProvider) ?? '';
+
     return Stack(
       children: [
         ListView(
@@ -632,7 +680,12 @@ class _BookshelfTabContentState extends ConsumerState<_BookshelfTabContent> {
             if (inProgressBooks.isEmpty)
               _buildEmptyHint('还没有在读的书')
             else
-              ...inProgressBooks.map((book) => _buildBookItem(book)),
+              ...inProgressBooks.map((book) => _buildBookItem(
+                    book,
+                    classLearning,
+                    classmates,
+                    currentUserId,
+                  )),
 
             const SizedBox(height: AppSpacing.lg),
 
@@ -758,7 +811,27 @@ class _BookshelfTabContentState extends ConsumerState<_BookshelfTabContent> {
   // 书籍条目
   // ============================================================
 
-  Widget _buildBookItem(LearningEntry book) {
+  Widget _buildBookItem(
+    LearningEntry book,
+    List<LearningEntry>? classLearning,
+    List<Profile> classmates,
+    String currentUserId,
+  ) {
+    // 读书圈计数（排除自己）
+    int readingCircleCount = 0;
+    if (classLearning != null) {
+      final bookTitleNorm = book.title.trim().toLowerCase();
+      readingCircleCount = classLearning
+          .where((e) =>
+              e.type == 'book' &&
+              e.status == 'in_progress' &&
+              e.title.trim().toLowerCase() == bookTitleNorm &&
+              e.studentId != currentUserId)
+          .map((e) => e.studentId)
+          .toSet()
+          .length;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -817,6 +890,29 @@ class _BookshelfTabContentState extends ConsumerState<_BookshelfTabContent> {
               ],
             ),
           ),
+          // 读书圈标签
+          if (readingCircleCount > 0)
+            GestureDetector(
+              onTap: () => _showReadingCircleDialog(
+                  book, classLearning!, classmates, currentUserId),
+              child: Container(
+                margin: const EdgeInsets.only(left: AppSpacing.sm),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.moodBlueBg,
+                  borderRadius:
+                      BorderRadius.circular(AppRadius.small),
+                ),
+                child: Text(
+                  '\u{1F465}$readingCircleCount人在读',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ),
           _buildPopupMenu(book, isBook: true),
         ],
       ),
@@ -1166,6 +1262,100 @@ class _BookshelfTabContentState extends ConsumerState<_BookshelfTabContent> {
             child: const Text('删除'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showReadingCircleDialog(
+    LearningEntry book,
+    List<LearningEntry> classLearning,
+    List<Profile> classmates,
+    String currentUserId,
+  ) {
+    final bookTitleNorm = book.title.trim().toLowerCase();
+    final readers = classLearning
+        .where((e) =>
+            e.type == 'book' &&
+            e.status == 'in_progress' &&
+            e.title.trim().toLowerCase() == bookTitleNorm &&
+            e.studentId != currentUserId)
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '\u{1F4DA} 正在读《${book.title}》的同学',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              ...readers.map((entry) {
+                final classmate = classmates
+                    .where((c) => c.id == entry.studentId)
+                    .firstOrNull;
+                if (classmate == null) return const SizedBox.shrink();
+                return ListTile(
+                  leading: AvatarCircle(
+                    avatarKey: classmate.avatarKey,
+                    size: 36,
+                  ),
+                  title: Text(classmate.nickname),
+                  trailing: SizedBox(
+                    width: 100,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: entry.progress / 100.0,
+                              backgroundColor: AppColors.divider,
+                              color: AppColors.primary,
+                              minHeight: 6,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${entry.progress}%',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/classmates/${classmate.id}');
+                  },
+                );
+              }),
+              const SizedBox(height: AppSpacing.md),
+              const Text(
+                '一起读书，一起成长 \u{1F4D6}',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

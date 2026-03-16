@@ -12,6 +12,8 @@ import '../screens/student/checkin_flow_screen.dart';
 import '../screens/student/calendar_screen.dart';
 import '../screens/student/profile_screen.dart';
 import '../screens/student/garden_screen.dart';
+import '../screens/student/classmates_screen.dart';
+import '../screens/student/classmate_detail_screen.dart';
 import '../screens/teacher/teacher_shell.dart';
 import '../screens/login_screen.dart';
 import '../screens/teacher/register_screen.dart';
@@ -99,6 +101,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/checkin',
         builder: (context, state) => const CheckinFlowScreen(),
+      ),
+
+      // Classmates (班级森林 — full screen, no bottom nav)
+      GoRoute(
+        path: '/classmates',
+        builder: (context, state) => const ClassmatesScreen(),
+      ),
+
+      // Classmate detail (同学详情 — full screen, no bottom nav)
+      GoRoute(
+        path: '/classmates/:id',
+        builder: (context, state) {
+          final classmateId = state.pathParameters['id'] ?? '';
+          return ClassmateDetailScreen(classmateId: classmateId);
+        },
       ),
 
       // Student shell with bottom navigation

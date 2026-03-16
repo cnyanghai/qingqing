@@ -5,6 +5,7 @@ import '../models/classroom.dart';
 import '../models/checkin.dart';
 import '../models/badge.dart';
 import '../models/learning_entry.dart';
+import '../models/water_record.dart';
 
 /// Central Supabase service for all database operations
 class SupabaseService {
@@ -583,6 +584,130 @@ class SupabaseService {
       await _client.from('learning_entries').delete().eq('id', id);
     } catch (e) {
       throw Exception('删除学习记录失败: $e');
+    }
+  }
+
+  // ---------- Water Records (浇水) ----------
+
+  /// 给同学浇水（需要传入classroomId以满足RLS策略）
+  /// 唯一约束冲突时Supabase返回PostgrestException，code='23505'
+  /// 调用方应这样catch:
+  /// on PostgrestException catch (e) {
+  ///   if (e.code == '23505') { /* 今天已浇过 */ }
+  /// }
+  Future<WaterRecord> waterTree(
+      String fromStudentId, String toStudentId, String classroomId) async {
+    try {
+      final data = await _client
+          .from('water_records')
+          .insert({
+            'from_student_id': fromStudentId,
+            'to_student_id': toStudentId,
+            'classroom_id': classroomId,
+          })
+          .select()
+          .single();
+      return WaterRecord.fromJson(data);
+    } on PostgrestException {
+      rethrow;
+    } catch (e) {
+      throw Exception('浇水失败: $e');
+    }
+  }
+
+  /// 获取今天我是否已给某人浇过水
+  Future<bool> hasWateredToday(
+      String fromStudentId, String toStudentId) async {
+    try {
+      final today = _formatDate(DateTime.now());
+      final data = await _client
+          .from('water_records')
+          .select('id')
+          .eq('from_student_id', fromStudentId)
+          .eq('to_student_id', toStudentId)
+          .eq('watered_at', today)
+          .maybeSingle();
+      return data != null;
+    } catch (e) {
+      throw Exception('查询浇水状态失败: $e');
+    }
+  }
+
+  /// 获取某人今天收到的浇水次数
+  Future<int> getTodayWaterCount(String toStudentId) async {
+    try {
+      final today = _formatDate(DateTime.now());
+      final data = await _client
+          .from('water_records')
+          .select('id')
+          .eq('to_student_id', toStudentId)
+          .eq('watered_at', today);
+      return (data as List).length;
+    } catch (e) {
+      throw Exception('查询今日浇水数失败: $e');
+    }
+  }
+
+  /// 获取某人总共收到的浇水次数
+  Future<int> getTotalWaterCount(String toStudentId) async {
+    try {
+      final data = await _client
+          .from('water_records')
+          .select('id')
+          .eq('to_student_id', toStudentId);
+      return (data as List).length;
+    } catch (e) {
+      throw Exception('查询总浇水数失败: $e');
+    }
+  }
+
+  /// 获取我今天收到的浇水记录（含浇水人ID）
+  Future<List<WaterRecord>> getMyTodayWaters(String toStudentId) async {
+    try {
+      final today = _formatDate(DateTime.now());
+      final data = await _client
+          .from('water_records')
+          .select()
+          .eq('to_student_id', toStudentId)
+          .eq('watered_at', today)
+          .order('created_at', ascending: false);
+      return (data as List).map((e) => WaterRecord.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('查询今日收到浇水失败: $e');
+    }
+  }
+
+  // ---------- Classmates (同学) ----------
+
+  /// 获取同班同学列表（学生视角，通过自己的classroomId，排除自己）
+  Future<List<Profile>> getClassmates(
+      String classroomId, String excludeUserId) async {
+    try {
+      final data = await _client
+          .from('profiles')
+          .select()
+          .eq('classroom_id', classroomId)
+          .eq('role', 'student')
+          .neq('id', excludeUserId)
+          .order('nickname');
+      return (data as List).map((e) => Profile.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('获取同学列表失败: $e');
+    }
+  }
+
+  /// 获取指定学生的学习记录（学生视角，依赖RLS classmates can read）
+  Future<List<LearningEntry>> getStudentLearningEntries(
+      String studentId) async {
+    try {
+      final data = await _client
+          .from('learning_entries')
+          .select()
+          .eq('student_id', studentId)
+          .order('created_at', ascending: false);
+      return (data as List).map((e) => LearningEntry.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('获取学生学习记录失败: $e');
     }
   }
 

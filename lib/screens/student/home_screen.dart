@@ -4,9 +4,13 @@ import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
 import '../../models/checkin.dart';
 import '../../models/learning_entry.dart';
+import '../../models/profile.dart';
+import '../../models/water_record.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/checkin_provider.dart';
 import '../../providers/learning_provider.dart';
+import '../../providers/social_provider.dart';
 import '../../widgets/avatar_picker.dart';
 import '../../widgets/streak_badge.dart';
 import '../../widgets/add_learning_dialog.dart';
@@ -31,6 +35,9 @@ class HomeScreen extends ConsumerWidget {
     final currentSkills = ref.watch(currentSkillsProvider);
     final allEntries =
         ref.watch(myLearningEntriesProvider).valueOrNull ?? [];
+    final todayWatersAsync = ref.watch(myTodayWatersProvider);
+    final classmatesAsync = ref.watch(classmatesProvider);
+    final userId = ref.watch(currentUserIdProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -93,6 +100,12 @@ class HomeScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.lg),
 
+                  // 浇水通知条
+                  _buildWaterNotification(
+                    todayWatersAsync.valueOrNull ?? [],
+                    classmatesAsync.valueOrNull ?? [],
+                  ),
+
                   // Main check-in card
                   _buildCheckinCard(context, hasCheckedIn, latestCheckin, todayCheckins.length),
                   const SizedBox(height: AppSpacing.lg),
@@ -102,7 +115,13 @@ class HomeScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.lg),
 
                   // 最近在读
-                  _buildRecentBooksCard(context, currentBooks),
+                  _buildRecentBooksCard(
+                    context,
+                    currentBooks,
+                    ref.watch(classmateLearningProvider).valueOrNull,
+                    classmatesAsync.valueOrNull ?? [],
+                    userId ?? '',
+                  ),
                   const SizedBox(height: AppSpacing.lg),
 
                   // 正在学习
@@ -111,6 +130,13 @@ class HomeScreen extends ConsumerWidget {
 
                   // 智慧树缩略入口
                   _buildWisdomTreeEntry(context, allEntries),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // 班级森林入口
+                  _buildClassForestEntry(
+                    context,
+                    classmatesAsync.valueOrNull ?? [],
+                  ),
                 ],
               ),
             );
@@ -372,7 +398,11 @@ class HomeScreen extends ConsumerWidget {
   // ============================================================
 
   Widget _buildRecentBooksCard(
-      BuildContext context, List<LearningEntry> books) {
+      BuildContext context,
+      List<LearningEntry> books,
+      List<LearningEntry>? classLearning,
+      List<Profile> classmates,
+      String currentUserId) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -436,9 +466,19 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
             )
-          else
+          else ...[
             // 显示最近1本书
             _buildBookRow(books.first),
+            // 读书圈标识（仅在classLearning已缓存时显示）
+            if (classLearning != null)
+              _buildReadingCircleHint(
+                context,
+                books.first,
+                classLearning,
+                classmates,
+                currentUserId,
+              ),
+          ],
         ],
       ),
     );
@@ -624,6 +664,249 @@ class HomeScreen extends ConsumerWidget {
               size: 20,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // 浇水通知条
+  // ============================================================
+
+  Widget _buildWaterNotification(
+      List<WaterRecord> todayWaters, List<Profile> classmates) {
+    if (todayWaters.isEmpty) return const SizedBox.shrink();
+
+    // 解析浇水人昵称
+    final waterFromIds = todayWaters
+        .map((w) => w.fromStudentId)
+        .toList();
+    final names = <String>[];
+    for (final fromId in waterFromIds) {
+      final match = classmates.where((c) => c.id == fromId).firstOrNull;
+      if (match != null && !names.contains(match.nickname)) {
+        names.add(match.nickname);
+      }
+    }
+
+    if (names.isEmpty) return const SizedBox.shrink();
+
+    final firstName = names.first;
+    final count = names.length;
+    final text = count == 1
+        ? '\u{1F4A7} 今天$firstName给你的智慧树浇了水！'
+        : '\u{1F4A7} 今天$firstName等$count位同学给你的智慧树浇了水！';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.moodBlueBg,
+          borderRadius: BorderRadius.circular(AppRadius.large),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.textDark,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // 班级森林入口
+  // ============================================================
+
+  Widget _buildClassForestEntry(
+      BuildContext context, List<Profile> classmates) {
+    return GestureDetector(
+      onTap: () => context.push('/classmates'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(AppRadius.xLarge),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '\u{1F332} 班级森林 \u{00B7} ${classmates.length}位同学',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: AppColors.textHint,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // 读书圈标识（首页）
+  // ============================================================
+
+  Widget _buildReadingCircleHint(
+    BuildContext context,
+    LearningEntry book,
+    List<LearningEntry> classLearning,
+    List<Profile> classmates,
+    String currentUserId,
+  ) {
+    final bookTitleNorm = book.title.trim().toLowerCase();
+    // 排除自己的记录
+    final readers = classLearning
+        .where((e) =>
+            e.type == 'book' &&
+            e.status == 'in_progress' &&
+            e.title.trim().toLowerCase() == bookTitleNorm &&
+            e.studentId != currentUserId)
+        .toList();
+
+    if (readers.isEmpty) return const SizedBox.shrink();
+
+    // 找到第一个读者的昵称
+    final firstReaderId = readers.first.studentId;
+    final firstReader =
+        classmates.where((c) => c.id == firstReaderId).firstOrNull;
+    final name = firstReader?.nickname ?? '同学';
+    final count = readers.map((e) => e.studentId).toSet().length;
+
+    return GestureDetector(
+      onTap: () => _showReadingCircle(context, book, classLearning,
+          classmates, currentUserId),
+      child: Padding(
+        padding: const EdgeInsets.only(top: AppSpacing.xs),
+        child: Text(
+          count == 1
+              ? '\u{1F4DA} $name也在读'
+              : '\u{1F4DA} $name等$count位同学也在读',
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.primary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReadingCircle(
+    BuildContext context,
+    LearningEntry book,
+    List<LearningEntry> classLearning,
+    List<Profile> classmates,
+    String currentUserId,
+  ) {
+    // 延迟import避免循环，使用内联实现
+    final bookTitleNorm = book.title.trim().toLowerCase();
+    final readers = classLearning
+        .where((e) =>
+            e.type == 'book' &&
+            e.status == 'in_progress' &&
+            e.title.trim().toLowerCase() == bookTitleNorm &&
+            e.studentId != currentUserId)
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '\u{1F4DA} 正在读《${book.title}》的同学',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              ...readers.map((entry) {
+                final classmate = classmates
+                    .where((c) => c.id == entry.studentId)
+                    .firstOrNull;
+                if (classmate == null) return const SizedBox.shrink();
+                return ListTile(
+                  leading: AvatarCircle(
+                    avatarKey: classmate.avatarKey,
+                    size: 36,
+                  ),
+                  title: Text(classmate.nickname),
+                  trailing: SizedBox(
+                    width: 100,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: entry.progress / 100.0,
+                              backgroundColor: AppColors.divider,
+                              color: AppColors.primary,
+                              minHeight: 6,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${entry.progress}%',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/classmates/${classmate.id}');
+                  },
+                );
+              }),
+              const SizedBox(height: AppSpacing.md),
+              const Text(
+                '一起读书，一起成长 \u{1F4D6}',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
