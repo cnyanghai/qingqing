@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +11,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/social_provider.dart';
 import '../../widgets/avatar_picker.dart';
+import '../../widgets/tree_painter.dart';
 
 /// 同学详情页 — 智慧树只读视图 + 浇水 + 留言板
 class ClassmateDetailScreen extends ConsumerStatefulWidget {
@@ -514,14 +514,17 @@ class _ClassmateDetailScreenState
     );
   }
 
+  /// Group learning entries by category
+  Map<String, int> _groupByCategory(List<LearningEntry> entries) {
+    final result = <String, int>{};
+    for (final e in entries) {
+      result[e.category] = (result[e.category] ?? 0) + 1;
+    }
+    return result;
+  }
+
   Widget _buildTreeVisualization(
       Profile profile, List<LearningEntry> entries) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final treeHeight = min(160.0, 40.0 + entries.length * 6.0);
-
-    // 浇水发光效果
-    final hasGlow = _totalWaterCount > 0;
-
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -545,125 +548,49 @@ class _ClassmateDetailScreenState
                 stops: [0.0, 0.5, 1.0],
               ),
             ),
-            child: entries.isNotEmpty
-                ? _buildTree(entries, screenWidth, treeHeight, hasGlow)
-                : const Center(
-                    child: Text(
-                      '\u{1F331} 还没有学习记录',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                  ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              child: CustomPaint(
+                painter: TreePainter(
+                  leafCount: entries
+                      .where((e) => e.status == 'in_progress')
+                      .length,
+                  fruitCount: entries
+                      .where((e) => e.status == 'completed')
+                      .length,
+                  categoryLeaves: _groupByCategory(entries),
+                  animationValue: 0.0, // static display for classmate page
+                  totalWaterCount: _totalWaterCount,
+                  showGlow: _totalWaterCount > 0,
+                ),
+                size: Size.infinite,
+              ),
+            ),
           ),
         ),
-        // 水滴动画
+        // Water drop animation
         if (_showWaterDrop)
           AnimatedPositioned(
             duration: const Duration(milliseconds: 500),
             curve: Curves.bounceOut,
             top: _showWaterDrop ? 80 : 0,
-            child: const Text(
-              '\u{1F4A7}',
-              style: TextStyle(fontSize: 32),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                color: Color(0xFF64B5F6),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.water_drop,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
             ),
           ),
       ],
-    );
-  }
-
-  Widget _buildTree(List<LearningEntry> entries, double screenWidth,
-      double treeHeight, bool hasGlow) {
-    final centerX = screenWidth / 2 - AppSpacing.md;
-
-    final categoryCounts = <String, List<LearningEntry>>{};
-    for (final e in entries) {
-      categoryCounts.putIfAbsent(e.category, () => []).add(e);
-    }
-    final categories = categoryCounts.keys.toList();
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.large),
-      child: Stack(
-        children: [
-          // 树干
-          Positioned(
-            left: centerX - 4,
-            bottom: 10,
-            child: Container(
-              width: 8,
-              height: treeHeight,
-              decoration: BoxDecoration(
-                color: const Color(0xFF8D6E63),
-                borderRadius: BorderRadius.circular(4),
-                boxShadow: hasGlow
-                    ? [
-                        BoxShadow(
-                          color: Colors.lightBlueAccent
-                              .withValues(alpha: 0.5),
-                          blurRadius: 12,
-                          spreadRadius: 2,
-                        ),
-                      ]
-                    : null,
-              ),
-            ),
-          ),
-          // 枝干+叶子/果实
-          ...categories.asMap().entries.expand((catEntry) {
-            final catIndex = catEntry.key;
-            final catKey = catEntry.value;
-            final catEntries = categoryCounts[catKey]!;
-            final branchY = treeHeight -
-                20 -
-                catIndex *
-                    (treeHeight / (categories.length + 1));
-            final isLeft = catIndex.isEven;
-
-            final branchWidgets = <Widget>[
-              Positioned(
-                left: isLeft
-                    ? centerX - 34
-                    : centerX + 4,
-                bottom: branchY + 10,
-                child: Container(
-                  width: 34,
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF8D6E63),
-                    borderRadius: BorderRadius.circular(1.5),
-                  ),
-                ),
-              ),
-            ];
-
-            for (int i = 0; i < catEntries.length && i < 3; i++) {
-              final e = catEntries[i];
-              final isCompleted = e.status == 'completed';
-              final config =
-                  LearningCategories.getCategory(e.category);
-              final offsetX = isLeft
-                  ? centerX - 44 - i * 16.0
-                  : centerX + 38 + i * 16.0;
-
-              branchWidgets.add(
-                Positioned(
-                  left: offsetX,
-                  bottom: branchY + 8,
-                  child: Text(
-                    isCompleted ? config.emoji : '\u{1F33F}',
-                    style: TextStyle(
-                        fontSize: isCompleted ? 16 : 14),
-                  ),
-                ),
-              );
-            }
-
-            return branchWidgets;
-          }),
-        ],
-      ),
     );
   }
 

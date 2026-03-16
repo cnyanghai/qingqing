@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +14,8 @@ import '../../providers/social_provider.dart';
 import '../../services/garden_service.dart';
 import '../../widgets/add_learning_dialog.dart';
 import '../../widgets/avatar_picker.dart';
+import '../../widgets/garden_painter.dart';
+import '../../widgets/tree_painter.dart';
 
 /// 花园状态 Provider
 final gardenStateProvider = FutureProvider<GardenState>((ref) async {
@@ -76,17 +77,23 @@ class GardenScreen extends ConsumerStatefulWidget {
 }
 
 class _GardenScreenState extends ConsumerState<GardenScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late TabController _tabController;
+  late AnimationController _sceneAnimationController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _sceneAnimationController = AnimationController(
+      duration: const Duration(seconds: 8),
+      vsync: this,
+    )..repeat();
   }
 
   @override
   void dispose() {
+    _sceneAnimationController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -167,60 +174,60 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
     );
   }
 
-  /// 统一顶部场景：花朵 + 智慧树
+  /// Group learning entries by category for tree visualization
+  Map<String, int> _groupByCategory(List<LearningEntry> entries) {
+    final result = <String, int>{};
+    for (final e in entries) {
+      result[e.category] = (result[e.category] ?? 0) + 1;
+    }
+    return result;
+  }
+
+  /// 统一顶部场景：CustomPainter 花朵 + 智慧树
   Widget _buildUnifiedScene(BuildContext context, GardenState garden,
       List<LearningEntry> entries, int totalWaterCount) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.all(AppSpacing.sm),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.large),
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFB3E5FC), // 天空蓝
-            Color(0xFFC8E6C9), // 浅绿
-            Color(0xFF81C784), // 深绿草地
-          ],
-          stops: [0.0, 0.5, 1.0],
-        ),
-      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.large),
         child: Stack(
           children: [
-            // 左侧：花朵（缩小版，最近20朵）
-            ..._buildMiniFlowers(garden, screenWidth),
-            // 右侧/中央：智慧树可视化
-            if (entries.isNotEmpty)
-              _buildWisdomTree(entries, screenWidth, totalWaterCount)
-            else
-              // 浇水统计
-            if (totalWaterCount > 0)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.white.withValues(alpha: 0.8),
-                    borderRadius:
-                        BorderRadius.circular(AppRadius.round),
-                  ),
-                  child: Text(
-                    '\u{1F4A7} 累计收到$totalWaterCount次浇水',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.primary,
+            // Canvas-painted scene
+            AnimatedBuilder(
+              animation: _sceneAnimationController,
+              builder: (context, child) {
+                return CustomPaint(
+                  painter: _GardenScenePainter(
+                    flowers: garden.flowers
+                        .take(50)
+                        .toList()
+                        .asMap()
+                        .entries
+                        .map((e) => FlowerData(
+                              quadrant: e.value.quadrant,
+                              index: e.key,
+                            ))
+                        .toList(),
+                    treeData: TreeData(
+                      leafCount: entries
+                          .where((e) => e.status == 'in_progress')
+                          .length,
+                      fruitCount: entries
+                          .where((e) => e.status == 'completed')
+                          .length,
+                      categoryLeaves: _groupByCategory(entries),
+                      totalWaterCount: totalWaterCount,
                     ),
+                    animationValue: _sceneAnimationController.value,
+                    hasEntries: entries.isNotEmpty,
                   ),
-                ),
-              ),
-            // 如果没有学习记录：底部引导文字
+                  size: Size.infinite,
+                );
+              },
+            ),
+            // Overlaid UI: guide text when no learning entries
+            if (entries.isEmpty)
               Positioned(
                 bottom: 12,
                 left: 0,
@@ -236,7 +243,7 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
                       borderRadius: BorderRadius.circular(AppRadius.round),
                     ),
                     child: const Text(
-                      '添加第一本书，种下智慧树',
+                      '\u{1F331} 添加第一本书，种下智慧树',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textDark,
@@ -516,139 +523,62 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
     return '${dateTime.month}/${dateTime.day}';
   }
 
-  /// 缩小版花朵（最近20朵，分布在左半侧）
-  List<Widget> _buildMiniFlowers(GardenState garden, double screenWidth) {
-    if (garden.flowers.isEmpty) return [];
+}
 
-    final displayFlowers = garden.flowers.length > 20
-        ? garden.flowers.sublist(garden.flowers.length - 20)
-        : garden.flowers;
+/// Composite painter: draws garden background + tree on a single canvas
+class _GardenScenePainter extends CustomPainter {
+  final List<FlowerData> flowers;
+  final TreeData treeData;
+  final double animationValue;
+  final bool hasEntries;
 
-    final areaWidth = screenWidth * 0.45;
-    const areaHeight = 160.0;
+  _GardenScenePainter({
+    required this.flowers,
+    required this.treeData,
+    required this.animationValue,
+    required this.hasEntries,
+  }) : super(repaint: null);
 
-    return displayFlowers.asMap().entries.map((entry) {
-      final index = entry.key;
-      final flower = entry.value;
-      final config = GardenConfig.getFlower(flower.quadrant);
-      if (config == null) return const SizedBox.shrink();
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 1) Garden background (sky + clouds + sun + grass + flowers)
+    final gardenPainter = GardenPainter(
+      flowers: flowers,
+      animationValue: animationValue,
+      canvasSize: size,
+    );
+    gardenPainter.paint(canvas, size);
 
-      final seed = index * 31 + flower.quadrant.hashCode;
-      final rng = Random(seed);
-      final x = 8 + rng.nextDouble() * (areaWidth - 24);
-      final y = 16 + rng.nextDouble() * areaHeight;
-      final fontSize = 18.0 + rng.nextDouble() * 6.0;
+    // 2) Wisdom tree (right-center of canvas)
+    if (hasEntries) {
+      final treeWidth = size.width * 0.35;
+      final treeHeight = size.height * 0.70;
+      final treeLeft = size.width * 0.58;
+      final treeTop = size.height * 0.15;
 
-      return Positioned(
-        left: x,
-        top: y,
-        child: Text(
-          config.emoji,
-          style: TextStyle(fontSize: fontSize),
-        ),
+      canvas.save();
+      canvas.translate(treeLeft, treeTop);
+      final treePainter = TreePainter(
+        leafCount: treeData.leafCount,
+        fruitCount: treeData.fruitCount,
+        categoryLeaves: treeData.categoryLeaves,
+        animationValue: animationValue,
+        totalWaterCount: treeData.totalWaterCount,
+        showGlow: treeData.totalWaterCount > 0,
       );
-    }).toList();
+      treePainter.paint(canvas, Size(treeWidth, treeHeight));
+      canvas.restore();
+    }
   }
 
-  /// 智慧树可视化（Stack+Positioned+emoji）
-  Widget _buildWisdomTree(
-      List<LearningEntry> entries, double screenWidth, int totalWaterCount) {
-    final treeHeight = min(150.0, 30.0 + entries.length * 5.0);
-    final treeX = screenWidth * 0.6;
-
-    // 按类别分组
-    final categoryCounts = <String, List<LearningEntry>>{};
-    for (final e in entries) {
-      categoryCounts.putIfAbsent(e.category, () => []).add(e);
-    }
-    final categories = categoryCounts.keys.toList();
-
-    return Positioned(
-      left: treeX,
-      bottom: 10,
-      child: SizedBox(
-        width: screenWidth * 0.35,
-        height: treeHeight + 20,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // 树干
-            Positioned(
-              left: screenWidth * 0.35 / 2 - 3,
-              bottom: 0,
-              child: Container(
-                width: 6,
-                height: treeHeight,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8D6E63),
-                  borderRadius: BorderRadius.circular(3),
-                  boxShadow: totalWaterCount > 0
-                      ? [
-                          BoxShadow(
-                            color: Colors.lightBlueAccent
-                                .withValues(alpha: 0.5),
-                            blurRadius: 10,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                      : null,
-                ),
-              ),
-            ),
-            // 枝干 + 叶子/果实
-            ...categories.asMap().entries.expand((catEntry) {
-              final catIndex = catEntry.key;
-              final catKey = catEntry.value;
-              final catEntries = categoryCounts[catKey]!;
-              final branchY =
-                  treeHeight - 20 - catIndex * (treeHeight / (categories.length + 1));
-              final isLeft = catIndex.isEven;
-
-              final branchWidgets = <Widget>[
-                // 枝干
-                Positioned(
-                  left: isLeft
-                      ? screenWidth * 0.35 / 2 - 30
-                      : screenWidth * 0.35 / 2 + 3,
-                  bottom: branchY,
-                  child: Container(
-                    width: 30,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8D6E63),
-                      borderRadius: BorderRadius.circular(1.5),
-                    ),
-                  ),
-                ),
-              ];
-
-              // 叶子和果实
-              for (int i = 0; i < catEntries.length && i < 3; i++) {
-                final e = catEntries[i];
-                final isCompleted = e.status == 'completed';
-                final config = LearningCategories.getCategory(e.category);
-                final offsetX = isLeft
-                    ? screenWidth * 0.35 / 2 - 40 - i * 14.0
-                    : screenWidth * 0.35 / 2 + 34 + i * 14.0;
-
-                branchWidgets.add(
-                  Positioned(
-                    left: offsetX,
-                    bottom: branchY - 2,
-                    child: Text(
-                      isCompleted ? config.emoji : '\u{1F33F}', // 果实用类别emoji，叶子用🌿
-                      style: TextStyle(fontSize: isCompleted ? 14 : 12),
-                    ),
-                  ),
-                );
-              }
-
-              return branchWidgets;
-            }),
-          ],
-        ),
-      ),
-    );
+  @override
+  bool shouldRepaint(covariant _GardenScenePainter oldDelegate) {
+    return oldDelegate.animationValue != animationValue ||
+        oldDelegate.flowers.length != flowers.length ||
+        oldDelegate.hasEntries != hasEntries ||
+        oldDelegate.treeData.leafCount != treeData.leafCount ||
+        oldDelegate.treeData.fruitCount != treeData.fruitCount ||
+        oldDelegate.treeData.totalWaterCount != treeData.totalWaterCount;
   }
 }
 
