@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
 import '../../models/checkin.dart';
+import '../../models/learning_entry.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/checkin_provider.dart';
+import '../../providers/learning_provider.dart';
 import '../../widgets/avatar_picker.dart';
 import '../../widgets/streak_badge.dart';
+import '../../widgets/add_learning_dialog.dart';
 
 /// S4: Student home screen
 class HomeScreen extends ConsumerWidget {
@@ -24,6 +27,10 @@ class HomeScreen extends ConsumerWidget {
     final profileAsync = ref.watch(profileProvider);
     final todayCheckinAsync = ref.watch(todayCheckinProvider);
     final weekCheckinsAsync = ref.watch(weekCheckinsProvider);
+    final currentBooks = ref.watch(currentBooksProvider);
+    final currentSkills = ref.watch(currentSkillsProvider);
+    final allEntries =
+        ref.watch(myLearningEntriesProvider).valueOrNull ?? [];
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -92,6 +99,18 @@ class HomeScreen extends ConsumerWidget {
 
                   // Weekly mood index card
                   _buildWeekCard(context, weekCheckins),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // 最近在读
+                  _buildRecentBooksCard(context, currentBooks),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // 正在学习
+                  _buildCurrentSkillsCard(context, currentSkills),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // 智慧树缩略入口
+                  _buildWisdomTreeEntry(context, allEntries),
                 ],
               ),
             );
@@ -345,6 +364,275 @@ class HomeScreen extends ConsumerWidget {
           ),
         );
       }).toList(),
+    );
+  }
+
+  // ============================================================
+  // Card A — 最近在读
+  // ============================================================
+
+  Widget _buildRecentBooksCard(
+      BuildContext context, List<LearningEntry> books) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.xLarge),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 标题行
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '\u{1F4D6} 最近在读',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _showAddDialog(context, 'book'),
+                child: const Icon(
+                  Icons.add_circle_outline,
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          if (books.isEmpty)
+            // 空状态引导
+            GestureDetector(
+              onTap: () => _showAddDialog(context, 'book'),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                child: const Column(
+                  children: [
+                    Text(
+                      '还没有在读的书，添加一本吧',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: AppSpacing.sm),
+                    Icon(Icons.add, color: AppColors.primary, size: 28),
+                  ],
+                ),
+              ),
+            )
+          else
+            // 显示最近1本书
+            _buildBookRow(books.first),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookRow(LearningEntry book) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          book.title,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textDark,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: book.progress / 100.0,
+                  backgroundColor: AppColors.divider,
+                  color: AppColors.primary,
+                  minHeight: 8,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              '${book.progress}%',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // Card B — 正在学习
+  // ============================================================
+
+  Widget _buildCurrentSkillsCard(
+      BuildContext context, List<LearningEntry> skills) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(AppRadius.xLarge),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '\u{1F3AF} 正在学习',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          if (skills.isEmpty)
+            // 空状态引导
+            GestureDetector(
+              onTap: () => _showAddDialog(context, 'skill'),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                child: const Column(
+                  children: [
+                    Text(
+                      '记录你在学习的技能吧',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: AppSpacing.sm),
+                    Icon(Icons.add, color: AppColors.primary, size: 28),
+                  ],
+                ),
+              ),
+            )
+          else
+            // 技能Chip列表
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                ...skills.map((skill) {
+                  final config =
+                      LearningCategories.getCategory(skill.category);
+                  return Chip(
+                    label: Text('${config.emoji} ${skill.title}'),
+                    labelStyle: const TextStyle(fontSize: 13),
+                    backgroundColor: config.color.withValues(alpha: 0.1),
+                    side: BorderSide.none,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  );
+                }),
+                // "+" 添加按钮Chip
+                ActionChip(
+                  label: const Icon(Icons.add, size: 16),
+                  onPressed: () => _showAddDialog(context, 'skill'),
+                  backgroundColor: AppColors.cardBackground,
+                  side: BorderSide.none,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // Card C — 智慧树缩略入口
+  // ============================================================
+
+  Widget _buildWisdomTreeEntry(
+      BuildContext context, List<LearningEntry> allEntries) {
+    final leaves =
+        allEntries.where((e) => e.status == 'in_progress').length;
+    final fruits =
+        allEntries.where((e) => e.status == 'completed').length;
+
+    return GestureDetector(
+      onTap: () => context.go('/garden'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(AppRadius.xLarge),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '\u{1F333} 我的智慧树 \u{00B7} $leaves片叶子 \u{00B7} $fruits个果实',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: AppColors.textHint,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddDialog(BuildContext context, String type) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AddLearningDialog(type: type),
     );
   }
 

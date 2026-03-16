@@ -22,6 +22,7 @@ import '../screens/teacher/class_code_screen.dart';
 import '../screens/teacher/settings_screen.dart';
 import '../screens/teacher/analytics_screen.dart';
 import '../screens/teacher/class_garden_screen.dart';
+import '../screens/teacher/class_bookshelf_screen.dart';
 import '../screens/privacy_screen.dart';
 import '../screens/terms_screen.dart';
 
@@ -166,6 +167,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/teacher/class-garden',
         builder: (context, state) => const ClassGardenScreen(),
+      ),
+
+      // Class bookshelf (standalone, pushed from analytics)
+      GoRoute(
+        path: '/teacher/class-bookshelf',
+        builder: (context, state) => const ClassBookshelfScreen(),
       ),
 
       // T4: Student detail (standalone)

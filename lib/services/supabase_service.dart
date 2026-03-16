@@ -4,6 +4,7 @@ import '../models/profile.dart';
 import '../models/classroom.dart';
 import '../models/checkin.dart';
 import '../models/badge.dart';
+import '../models/learning_entry.dart';
 
 /// Central Supabase service for all database operations
 class SupabaseService {
@@ -517,6 +518,71 @@ class SupabaseService {
     } catch (e) {
       if (e is Exception && e.toString().contains('无法生成')) rethrow;
       throw Exception('生成班级码失败: $e');
+    }
+  }
+
+  // ---------- Learning Entries ----------
+
+  /// 获取当前学生的学习记录
+  Future<List<LearningEntry>> getMyLearningEntries(String studentId) async {
+    try {
+      final data = await _client
+          .from('learning_entries')
+          .select()
+          .eq('student_id', studentId)
+          .order('created_at', ascending: false);
+      return (data as List).map((e) => LearningEntry.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('获取学习记录失败: $e');
+    }
+  }
+
+  /// 获取全班学习记录（教师端和同学可见）
+  Future<List<LearningEntry>> getClassLearningEntries(
+      String classroomId) async {
+    try {
+      final data = await _client
+          .from('learning_entries')
+          .select()
+          .eq('classroom_id', classroomId)
+          .order('created_at', ascending: false);
+      return (data as List).map((e) => LearningEntry.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('获取班级学习记录失败: $e');
+    }
+  }
+
+  /// 创建学习记录
+  Future<LearningEntry> createLearningEntry(LearningEntry entry) async {
+    try {
+      final data = await _client
+          .from('learning_entries')
+          .insert(entry.toJson())
+          .select()
+          .single();
+      return LearningEntry.fromJson(data);
+    } catch (e) {
+      throw Exception('添加学习记录失败: $e');
+    }
+  }
+
+  /// 更新学习记录（进度、状态）
+  Future<void> updateLearningEntry(
+      String id, Map<String, dynamic> updates) async {
+    try {
+      await _client.from('learning_entries').update(updates).eq('id', id);
+    } catch (e) {
+      throw Exception('更新学习记录失败: $e');
+    }
+  }
+
+  /// 删除学习记录
+  /// 注意：依赖RLS确保只能删除自己的记录，service层不额外校验student_id
+  Future<void> deleteLearningEntry(String id) async {
+    try {
+      await _client.from('learning_entries').delete().eq('id', id);
+    } catch (e) {
+      throw Exception('删除学习记录失败: $e');
     }
   }
 

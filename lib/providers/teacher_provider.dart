@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/profile.dart';
 import '../models/classroom.dart';
 import '../models/checkin.dart';
+import '../models/learning_entry.dart';
 import 'auth_provider.dart';
 
 /// Teacher's classroom
@@ -118,6 +119,19 @@ final studentProfileProvider =
     return await service.getStudentProfile(studentId);
   } catch (e) {
     return null;
+  }
+});
+
+/// 全班学习记录（教师端专用，与其他teacher providers同文件）
+final classLearningEntriesProvider =
+    FutureProvider<List<LearningEntry>>((ref) async {
+  final classroom = await ref.watch(teacherClassroomProvider.future);
+  if (classroom == null) return [];
+  final service = ref.watch(supabaseServiceProvider);
+  try {
+    return await service.getClassLearningEntries(classroom.id);
+  } catch (e) {
+    return [];
   }
 });
 

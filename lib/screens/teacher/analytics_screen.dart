@@ -92,6 +92,10 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
 
                   // Module D: Participation leaderboard
                   _buildLeaderboard(students, weekCheckins),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Module E: 班级书架入口
+                  _buildBookshelfEntry(context),
                 ],
               ),
             );
@@ -880,6 +884,62 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // Module E — 班级书架入口
+  // ============================================================
+
+  Widget _buildBookshelfEntry(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.push('/teacher/class-bookshelf'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(AppRadius.large),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Row(
+          children: [
+            Text('\u{1F4DA}', style: TextStyle(fontSize: 24)),
+            SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '班级书架',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '查看班级阅读情况和技能分布',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right,
+                color: AppColors.textHint, size: 24),
+          ],
+        ),
       ),
     );
   }
