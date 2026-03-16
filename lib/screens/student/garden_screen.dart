@@ -1,7 +1,9 @@
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
+import '../../game/garden_game.dart';
 import '../../models/garden.dart';
 import '../../models/learning_entry.dart';
 import '../../models/profile.dart';
@@ -14,8 +16,6 @@ import '../../providers/social_provider.dart';
 import '../../services/garden_service.dart';
 import '../../widgets/add_learning_dialog.dart';
 import '../../widgets/avatar_picker.dart';
-import '../../widgets/garden_painter.dart';
-import '../../widgets/tree_painter.dart';
 
 /// 花园状态 Provider
 final gardenStateProvider = FutureProvider<GardenState>((ref) async {
@@ -77,23 +77,17 @@ class GardenScreen extends ConsumerStatefulWidget {
 }
 
 class _GardenScreenState extends ConsumerState<GardenScreen>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late AnimationController _sceneAnimationController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _sceneAnimationController = AnimationController(
-      duration: const Duration(seconds: 8),
-      vsync: this,
-    )..repeat();
   }
 
   @override
   void dispose() {
-    _sceneAnimationController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -183,9 +177,21 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
     return result;
   }
 
-  /// 统一顶部场景：CustomPainter 花朵 + 智慧树
+  /// Unified top scene: Flame game with parallax background, flowers,
+  /// wisdom tree, and ambient particles.
   Widget _buildUnifiedScene(BuildContext context, GardenState garden,
       List<LearningEntry> entries, int totalWaterCount) {
+    final flowerDataList = garden.flowers
+        .take(50)
+        .toList()
+        .asMap()
+        .entries
+        .map((e) => GardenFlowerData(
+              quadrant: e.value.quadrant,
+              index: e.key,
+            ))
+        .toList();
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.all(AppSpacing.sm),
@@ -193,38 +199,18 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
         borderRadius: BorderRadius.circular(AppRadius.large),
         child: Stack(
           children: [
-            // Canvas-painted scene
-            AnimatedBuilder(
-              animation: _sceneAnimationController,
-              builder: (context, child) {
-                return CustomPaint(
-                  painter: _GardenScenePainter(
-                    flowers: garden.flowers
-                        .take(50)
-                        .toList()
-                        .asMap()
-                        .entries
-                        .map((e) => FlowerData(
-                              quadrant: e.value.quadrant,
-                              index: e.key,
-                            ))
-                        .toList(),
-                    treeData: TreeData(
-                      leafCount: entries
-                          .where((e) => e.status == 'in_progress')
-                          .length,
-                      fruitCount: entries
-                          .where((e) => e.status == 'completed')
-                          .length,
-                      categoryLeaves: _groupByCategory(entries),
-                      totalWaterCount: totalWaterCount,
-                    ),
-                    animationValue: _sceneAnimationController.value,
-                    hasEntries: entries.isNotEmpty,
-                  ),
-                  size: Size.infinite,
-                );
-              },
+            // Flame game scene
+            GameWidget(
+              game: GardenGame(
+                flowers: flowerDataList,
+                treeLeafCount:
+                    entries.where((e) => e.status == 'in_progress').length,
+                treeFruitCount:
+                    entries.where((e) => e.status == 'completed').length,
+                treeCategoryMap: _groupByCategory(entries),
+                waterCount: totalWaterCount,
+                hasEntries: entries.isNotEmpty,
+              ),
             ),
             // Overlaid UI: guide text when no learning entries
             if (entries.isEmpty)
@@ -243,7 +229,7 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
                       borderRadius: BorderRadius.circular(AppRadius.round),
                     ),
                     child: const Text(
-                      '\u{1F331} 添加第一本书，种下智慧树',
+                      '\u{1F331} \u{6DFB}\u{52A0}\u{7B2C}\u{4E00}\u{672C}\u{4E66}\u{FF0C}\u{79CD}\u{4E0B}\u{667A}\u{6167}\u{6811}',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textDark,
@@ -523,63 +509,6 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
     return '${dateTime.month}/${dateTime.day}';
   }
 
-}
-
-/// Composite painter: draws garden background + tree on a single canvas
-class _GardenScenePainter extends CustomPainter {
-  final List<FlowerData> flowers;
-  final TreeData treeData;
-  final double animationValue;
-  final bool hasEntries;
-
-  _GardenScenePainter({
-    required this.flowers,
-    required this.treeData,
-    required this.animationValue,
-    required this.hasEntries,
-  }) : super(repaint: null);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // 1) Garden background (sky + clouds + sun + grass + flowers)
-    final gardenPainter = GardenPainter(
-      flowers: flowers,
-      animationValue: animationValue,
-      canvasSize: size,
-    );
-    gardenPainter.paint(canvas, size);
-
-    // 2) Wisdom tree (right-center of canvas)
-    if (hasEntries) {
-      final treeWidth = size.width * 0.35;
-      final treeHeight = size.height * 0.70;
-      final treeLeft = size.width * 0.58;
-      final treeTop = size.height * 0.15;
-
-      canvas.save();
-      canvas.translate(treeLeft, treeTop);
-      final treePainter = TreePainter(
-        leafCount: treeData.leafCount,
-        fruitCount: treeData.fruitCount,
-        categoryLeaves: treeData.categoryLeaves,
-        animationValue: animationValue,
-        totalWaterCount: treeData.totalWaterCount,
-        showGlow: treeData.totalWaterCount > 0,
-      );
-      treePainter.paint(canvas, Size(treeWidth, treeHeight));
-      canvas.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _GardenScenePainter oldDelegate) {
-    return oldDelegate.animationValue != animationValue ||
-        oldDelegate.flowers.length != flowers.length ||
-        oldDelegate.hasEntries != hasEntries ||
-        oldDelegate.treeData.leafCount != treeData.leafCount ||
-        oldDelegate.treeData.fruitCount != treeData.fruitCount ||
-        oldDelegate.treeData.totalWaterCount != treeData.totalWaterCount;
-  }
 }
 
 // ============================================================

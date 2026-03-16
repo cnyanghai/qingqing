@@ -1,8 +1,10 @@
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/theme.dart';
+import '../../game/garden_game.dart';
 import '../../models/profile.dart';
 import '../../models/learning_entry.dart';
 import '../../models/water_record.dart';
@@ -11,7 +13,6 @@ import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/social_provider.dart';
 import '../../widgets/avatar_picker.dart';
-import '../../widgets/tree_painter.dart';
 
 /// 同学详情页 — 智慧树只读视图 + 浇水 + 留言板
 class ClassmateDetailScreen extends ConsumerStatefulWidget {
@@ -525,6 +526,8 @@ class _ClassmateDetailScreenState
 
   Widget _buildTreeVisualization(
       Profile profile, List<LearningEntry> entries) {
+    final categoryMap = _groupByCategory(entries);
+
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -532,38 +535,22 @@ class _ClassmateDetailScreenState
           scale: _treeScale,
           duration: const Duration(milliseconds: 300),
           curve: Curves.elasticOut,
-          child: Container(
+          child: SizedBox(
             width: double.infinity,
             height: 200,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.large),
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFFB3E5FC),
-                  Color(0xFFC8E6C9),
-                  Color(0xFF81C784),
-                ],
-                stops: [0.0, 0.5, 1.0],
-              ),
-            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.large),
-              child: CustomPaint(
-                painter: TreePainter(
-                  leafCount: entries
-                      .where((e) => e.status == 'in_progress')
-                      .length,
-                  fruitCount: entries
-                      .where((e) => e.status == 'completed')
-                      .length,
-                  categoryLeaves: _groupByCategory(entries),
-                  animationValue: 0.0, // static display for classmate page
-                  totalWaterCount: _totalWaterCount,
-                  showGlow: _totalWaterCount > 0,
+              child: GameWidget(
+                game: GardenGame(
+                  flowers: const [], // No flowers on classmate detail
+                  treeLeafCount:
+                      entries.where((e) => e.status == 'in_progress').length,
+                  treeFruitCount:
+                      entries.where((e) => e.status == 'completed').length,
+                  treeCategoryMap: categoryMap,
+                  waterCount: _totalWaterCount,
+                  hasEntries: entries.isNotEmpty,
                 ),
-                size: Size.infinite,
               ),
             ),
           ),
