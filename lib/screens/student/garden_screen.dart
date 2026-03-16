@@ -1,9 +1,8 @@
-import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lottie/lottie.dart';
 import '../../config/theme.dart';
-import '../../game/garden_game.dart';
 import '../../models/garden.dart';
 import '../../models/learning_entry.dart';
 import '../../models/profile.dart';
@@ -16,6 +15,7 @@ import '../../providers/social_provider.dart';
 import '../../services/garden_service.dart';
 import '../../widgets/add_learning_dialog.dart';
 import '../../widgets/avatar_picker.dart';
+import '../../widgets/learning_label.dart';
 
 /// 花园状态 Provider
 final gardenStateProvider = FutureProvider<GardenState>((ref) async {
@@ -168,50 +168,42 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
     );
   }
 
-  /// Group learning entries by category for tree visualization
-  Map<String, int> _groupByCategory(List<LearningEntry> entries) {
-    final result = <String, int>{};
-    for (final e in entries) {
-      result[e.category] = (result[e.category] ?? 0) + 1;
-    }
-    return result;
-  }
-
-  /// Unified top scene: Flame game with parallax background, flowers,
-  /// wisdom tree, and ambient particles.
+  /// Unified top scene: Lottie wisdom tree + data-driven labels + emotion flowers.
   Widget _buildUnifiedScene(BuildContext context, GardenState garden,
       List<LearningEntry> entries, int totalWaterCount) {
-    final flowerDataList = garden.flowers
-        .take(50)
-        .toList()
-        .asMap()
-        .entries
-        .map((e) => GardenFlowerData(
-              quadrant: e.value.quadrant,
-              index: e.key,
-            ))
-        .toList();
-
     return Container(
       width: double.infinity,
+      height: 200,
       margin: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.large),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFF5F0E8), // warm white sky
+            Color(0xFFE8E0D0), // soft beige ground
+          ],
+        ),
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.large),
         child: Stack(
           children: [
-            // Flame game scene
-            GameWidget(
-              game: GardenGame(
-                flowers: flowerDataList,
-                treeLeafCount:
-                    entries.where((e) => e.status == 'in_progress').length,
-                treeFruitCount:
-                    entries.where((e) => e.status == 'completed').length,
-                treeCategoryMap: _groupByCategory(entries),
-                waterCount: totalWaterCount,
-                hasEntries: entries.isNotEmpty,
+            // Layer 1: Lottie wisdom tree animation (center)
+            Center(
+              child: Lottie.asset(
+                'assets/animations/virtues_tree.json',
+                fit: BoxFit.contain,
+                repeat: true,
               ),
             ),
+            // Layer 2: Data-driven learning labels (tree canopy area)
+            ..._buildLearningLabels(entries, context),
+            // Layer 3: Emotion flowers (bottom grass area)
+            ..._buildEmotionFlowers(garden, context),
+            // Layer 4: Garden info (top-left)
+            _buildGardenInfo(garden, entries, totalWaterCount),
             // Overlaid UI: guide text when no learning entries
             if (entries.isEmpty)
               Positioned(
@@ -225,20 +217,98 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.white.withValues(alpha: 0.7),
+                      color: const Color(0xFFF5F0E8).withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(AppRadius.round),
                     ),
                     child: const Text(
-                      '\u{1F331} \u{6DFB}\u{52A0}\u{7B2C}\u{4E00}\u{672C}\u{4E66}\u{FF0C}\u{79CD}\u{4E0B}\u{667A}\u{6167}\u{6811}',
+                      '\u{1F331} 添加第一本书，种下智慧树',
                       style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textDark,
+                        color: Color(0xFF2E2E33),
                       ),
                     ),
                   ),
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Build learning labels floating in the tree canopy area.
+  List<Widget> _buildLearningLabels(
+      List<LearningEntry> entries, BuildContext context) {
+    if (entries.isEmpty) return [];
+
+    final displayEntries = entries.take(12).toList();
+    final labels = <Widget>[];
+
+    for (int i = 0; i < displayEntries.length; i++) {
+      final entry = displayEntries[i];
+      final isCompleted = entry.status == 'completed';
+
+      // Golden ratio distribution in tree canopy area (top 60%, left-right 80%)
+      final xRatio = 0.1 + (i * 0.618033988 % 0.8);
+      final yRatio = 0.05 + (i * 0.381966 % 0.45);
+
+      labels.add(Positioned(
+        left: xRatio * (MediaQuery.of(context).size.width - 32) * 0.85,
+        top: yRatio * 180,
+        child: LearningLabel(
+          title: entry.title,
+          category: entry.category,
+          isCompleted: isCompleted,
+        ),
+      ));
+    }
+    return labels;
+  }
+
+  /// Build emotion flowers at the bottom grass area.
+  List<Widget> _buildEmotionFlowers(
+      GardenState garden, BuildContext context) {
+    if (garden.flowers.isEmpty) return [];
+
+    final displayFlowers = garden.flowers.take(20).toList();
+    final flowers = <Widget>[];
+
+    for (int i = 0; i < displayFlowers.length; i++) {
+      final flower = displayFlowers[i];
+      final xRatio = (i * 0.618033988 % 0.9) + 0.05;
+
+      flowers.add(Positioned(
+        left: xRatio * (MediaQuery.of(context).size.width - 32),
+        bottom: 2.0 + (i % 3) * 8,
+        child: _EmotionFlower(quadrant: flower.quadrant),
+      ));
+    }
+    return flowers;
+  }
+
+  /// Garden info overlay (top-left corner).
+  Widget _buildGardenInfo(
+      GardenState garden, List<LearningEntry> entries, int totalWaterCount) {
+    final inProgressCount =
+        entries.where((e) => e.status == 'in_progress').length;
+    final completedCount =
+        entries.where((e) => e.status == 'completed').length;
+
+    return Positioned(
+      top: 8,
+      left: 8,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F0E8).withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(AppRadius.round),
+        ),
+        child: Text(
+          '\u{1F33F}$inProgressCount \u{00B7} \u{1F34E}$completedCount \u{00B7} \u{1F4A7}$totalWaterCount',
+          style: const TextStyle(
+            fontSize: 10,
+            color: Color(0xFF3F3C56),
+          ),
         ),
       ),
     );
@@ -1546,5 +1616,81 @@ class _BookshelfTabContentState extends ConsumerState<_BookshelfTabContent> {
         ),
       ),
     );
+  }
+}
+
+// ============================================================
+// Emotion flower widget (simplified for 16px scale)
+// ============================================================
+
+/// Simplified emotion flower: colored dot + stem, matching Lottie palette.
+class _EmotionFlower extends StatelessWidget {
+  final String quadrant;
+
+  const _EmotionFlower({required this.quadrant});
+
+  /// Soft color palette matching Lottie illustration style.
+  static const _flowerColors = <String, Color>{
+    'red': Color(0xFFD4817A),    // soft rose
+    'yellow': Color(0xFFDEB887),  // warm tan
+    'green': Color(0xFF8FBC8F),   // soft sage green
+    'blue': Color(0xFF7B9DAF),    // grey blue
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _flowerColors[quadrant] ?? const Color(0xFF8FBC8F);
+
+    return SizedBox(
+      width: 10,
+      height: 18,
+      child: CustomPaint(
+        painter: _SimpleFlowerPainter(color: color),
+      ),
+    );
+  }
+}
+
+/// Draws a simplified flower: a colored circle (blossom) + a short green stem.
+class _SimpleFlowerPainter extends CustomPainter {
+  final Color color;
+
+  const _SimpleFlowerPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centerX = size.width / 2;
+
+    // Stem (bottom half)
+    final stemPaint = Paint()
+      ..color = const Color(0xFF8FBC8F)
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(centerX, size.height * 0.45),
+      Offset(centerX, size.height),
+      stemPaint,
+    );
+
+    // Blossom (top circle, 8px diameter)
+    final blossomPaint = Paint()..color = color;
+    canvas.drawCircle(
+      Offset(centerX, size.height * 0.3),
+      4.0,
+      blossomPaint,
+    );
+
+    // Pistil center (wheat color)
+    final pistilPaint = Paint()..color = const Color(0xFFF5DEB3);
+    canvas.drawCircle(
+      Offset(centerX, size.height * 0.3),
+      1.5,
+      pistilPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SimpleFlowerPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }

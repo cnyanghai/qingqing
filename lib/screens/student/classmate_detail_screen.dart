@@ -1,10 +1,9 @@
-import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lottie/lottie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/theme.dart';
-import '../../game/garden_game.dart';
 import '../../models/profile.dart';
 import '../../models/learning_entry.dart';
 import '../../models/water_record.dart';
@@ -13,6 +12,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/social_provider.dart';
 import '../../widgets/avatar_picker.dart';
+import '../../widgets/learning_label.dart';
 
 /// 同学详情页 — 智慧树只读视图 + 浇水 + 留言板
 class ClassmateDetailScreen extends ConsumerStatefulWidget {
@@ -515,19 +515,8 @@ class _ClassmateDetailScreenState
     );
   }
 
-  /// Group learning entries by category
-  Map<String, int> _groupByCategory(List<LearningEntry> entries) {
-    final result = <String, int>{};
-    for (final e in entries) {
-      result[e.category] = (result[e.category] ?? 0) + 1;
-    }
-    return result;
-  }
-
   Widget _buildTreeVisualization(
       Profile profile, List<LearningEntry> entries) {
-    final categoryMap = _groupByCategory(entries);
-
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -535,22 +524,35 @@ class _ClassmateDetailScreenState
           scale: _treeScale,
           duration: const Duration(milliseconds: 300),
           curve: Curves.elasticOut,
-          child: SizedBox(
+          child: Container(
             width: double.infinity,
             height: 200,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFFF5F0E8), // warm white sky
+                  Color(0xFFE8E0D0), // soft beige ground
+                ],
+              ),
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.large),
-              child: GameWidget(
-                game: GardenGame(
-                  flowers: const [], // No flowers on classmate detail
-                  treeLeafCount:
-                      entries.where((e) => e.status == 'in_progress').length,
-                  treeFruitCount:
-                      entries.where((e) => e.status == 'completed').length,
-                  treeCategoryMap: categoryMap,
-                  waterCount: _totalWaterCount,
-                  hasEntries: entries.isNotEmpty,
-                ),
+              child: Stack(
+                children: [
+                  // Lottie wisdom tree
+                  Center(
+                    child: Lottie.asset(
+                      'assets/animations/virtues_tree.json',
+                      fit: BoxFit.contain,
+                      repeat: true,
+                    ),
+                  ),
+                  // Learning labels (no emotion flowers for classmate privacy)
+                  ..._buildClassmateLearningLabels(entries),
+                ],
               ),
             ),
           ),
@@ -579,6 +581,36 @@ class _ClassmateDetailScreenState
           ),
       ],
     );
+  }
+
+  /// Build learning labels for classmate tree (same layout as garden).
+  List<Widget> _buildClassmateLearningLabels(List<LearningEntry> entries) {
+    if (entries.isEmpty) return [];
+
+    final displayEntries = entries.take(12).toList();
+    final labels = <Widget>[];
+    // Use a LayoutBuilder-safe approach: calculate from fixed container width
+    final screenWidth = MediaQuery.of(context).size.width;
+    final containerWidth = screenWidth - 2 * AppSpacing.md;
+
+    for (int i = 0; i < displayEntries.length; i++) {
+      final entry = displayEntries[i];
+      final isCompleted = entry.status == 'completed';
+
+      final xRatio = 0.1 + (i * 0.618033988 % 0.8);
+      final yRatio = 0.05 + (i * 0.381966 % 0.45);
+
+      labels.add(Positioned(
+        left: xRatio * containerWidth * 0.85,
+        top: yRatio * 180,
+        child: LearningLabel(
+          title: entry.title,
+          category: entry.category,
+          isCompleted: isCompleted,
+        ),
+      ));
+    }
+    return labels;
   }
 
   Widget _buildWaterButton(String nickname) {
