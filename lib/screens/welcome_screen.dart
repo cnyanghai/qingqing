@@ -166,6 +166,16 @@ class WelcomeScreen extends ConsumerWidget {
                   ),
                 ),
                 const Spacer(),
+                // PWA install hint
+                const Text(
+                  '\u{1F4F1} 长按分享按钮，选择"添加到主屏幕"获得更好体验',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textHint,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 // Bottom tagline
                 const Text(
                   '让每一天都有好心情',

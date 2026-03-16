@@ -1,3 +1,6 @@
+// ignore_for_file: avoid_web_libraries_in_flutter
+import 'dart:convert';
+import 'dart:html' as html;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,16 +11,150 @@ import '../../config/theme.dart';
 import '../../models/checkin.dart';
 import '../../models/classroom.dart';
 import '../../models/profile.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/teacher_provider.dart';
 import '../../widgets/avatar_picker.dart';
 
 /// T2: Teacher dashboard screen
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  bool _isExporting = false;
+
+  Future<void> _handleExport(String classroomId, String range) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+
+    try {
+      final service = ref.read(supabaseServiceProvider);
+
+      // Calculate date range
+      final now = DateTime.now();
+      DateTime startDate;
+      if (range == 'week') {
+        startDate = now.subtract(Duration(days: now.weekday - 1));
+      } else {
+        startDate = DateTime(now.year, now.month, 1);
+      }
+
+      // Fetch data
+      final checkins = await service.getClassCheckinsRange(
+        classroomId,
+        startDate: startDate,
+        endDate: now,
+      );
+
+      if (checkins.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('该时间段暂无记录')),
+          );
+        }
+        return;
+      }
+
+      // Build student nickname map
+      final students = await service.getClassStudents(classroomId);
+      final nicknameMap = <String, String>{};
+      for (final s in students) {
+        nicknameMap[s.id] = s.nickname;
+      }
+
+      // Build CSV with BOM for Excel compatibility
+      final buffer = StringBuffer('\uFEFF');
+      buffer.writeln('学生昵称,日期,时间,情绪象限,具体情绪,场景,备注');
+
+      for (final c in checkins) {
+        final nickname = _escapeCsv(nicknameMap[c.studentId] ?? '未知');
+        final date = DateFormat('yyyy-MM-dd').format(c.checkedAt);
+        final time = c.createdAt != null
+            ? DateFormat('HH:mm').format(c.createdAt!)
+            : '-';
+        final quadrant = _escapeCsv(c.quadrant);
+        final emotion = _escapeCsv(c.emotionLabel);
+        final context = _escapeCsv(c.contextTag);
+        final note = _escapeCsv(c.note ?? '');
+        buffer.writeln('$nickname,$date,$time,$quadrant,$emotion,$context,$note');
+      }
+
+      // Trigger browser download
+      final dateStr = DateFormat('yyyy-MM-dd').format(now);
+      final rangeLabel = range == 'week' ? '周报' : '月报';
+      final fileName = '晴晴_班级${rangeLabel}_$dateStr.csv';
+
+      final bytes = utf8.encode(buffer.toString());
+      final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download', fileName)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('导出成功')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
+  }
+
+  /// Escape CSV field: wrap in quotes if it contains comma, quote, or newline
+  String _escapeCsv(String value) {
+    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
+  }
+
+  void _showExportOptions(String classroomId) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.calendar_today),
+                title: const Text('导出本周数据'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleExport(classroomId, 'week');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.date_range),
+                title: const Text('导出本月数据'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleExport(classroomId, 'month');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final profileAsync = ref.watch(profileProvider);
     final classroomAsync = ref.watch(teacherClassroomProvider);
     final studentsAsync = ref.watch(classStudentsProvider);
@@ -49,7 +186,7 @@ class DashboardScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header: teacher info
+                  // Header: teacher info + export button
                   _buildHeader(profile, classroom),
                   const SizedBox(height: AppSpacing.lg),
 
@@ -126,7 +263,28 @@ class DashboardScreen extends ConsumerWidget {
             ],
           ),
         ),
-        const SizedBox(width: 48), // 保持布局平衡
+        // Export button
+        if (classroom != null)
+          _isExporting
+              ? const SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.file_download,
+                      color: AppColors.textSecondary),
+                  tooltip: '导出数据',
+                  onPressed: () => _showExportOptions(classroom.id),
+                )
+        else
+          const SizedBox(width: 48), // 保持布局平衡
       ],
     );
   }
@@ -394,7 +552,7 @@ class DashboardScreen extends ConsumerWidget {
     String alertMessage;
     if (alertStudents.isNotEmpty) {
       const displayCount = 2;
-      final names = alertStudents.take(displayCount).map((s) => s.nickname).join('、');
+      final names = alertStudents.take(displayCount).map((s) => s.nickname).join('\u3001');
       final remaining = alertStudents.length - displayCount;
       final remainingSuffix = remaining > 0 ? '等$remaining位同学' : '';
       alertMessage = '$names$remainingSuffix今日情绪波动较大，建议午间进行心理疏导。';

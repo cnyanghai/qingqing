@@ -24,6 +24,7 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
   final _nicknameController = TextEditingController();
   String? _selectedAvatar;
   bool _isLoading = false;
+  bool _agreedToTerms = false;
 
   /// Validate Chinese mobile number: exactly 11 digits, starts with 1
   bool get _isValidPhone {
@@ -37,6 +38,7 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
       _selectedAvatar != null &&
       _nicknameController.text.isNotEmpty &&
       _nicknameController.text.length <= 8 &&
+      _agreedToTerms &&
       !_isLoading;
 
   @override
@@ -221,7 +223,69 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
                 ),
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.lg),
+              // Terms agreement checkbox
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: _agreedToTerms,
+                      onChanged: (value) {
+                        setState(() => _agreedToTerms = value ?? false);
+                      },
+                      activeColor: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() => _agreedToTerms = !_agreedToTerms);
+                      },
+                      child: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                          children: [
+                            const TextSpan(text: '我已阅读并同意'),
+                            WidgetSpan(
+                              child: GestureDetector(
+                                onTap: () => context.push('/terms'),
+                                child: const Text(
+                                  '《用户协议》',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const TextSpan(text: '和'),
+                            WidgetSpan(
+                              child: GestureDetector(
+                                onTap: () => context.push('/privacy'),
+                                child: const Text(
+                                  '《隐私政策》',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
               // Submit button
               SizedBox(
                 width: double.infinity,

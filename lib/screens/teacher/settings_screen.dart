@@ -142,6 +142,23 @@ class TeacherSettingsScreen extends ConsumerWidget {
                 },
               ),
 
+              const SizedBox(height: AppSpacing.md),
+
+              // Usage guide entry
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showUsageGuide(context),
+                  icon: const Icon(Icons.menu_book, size: 20),
+                  label: const Text('使用指南'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+
               const SizedBox(height: AppSpacing.xl),
 
               // Logout button
@@ -198,6 +215,64 @@ class TeacherSettingsScreen extends ConsumerWidget {
     );
   }
 
+  void _showUsageGuide(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.menu_book, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text('使用指南'),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _GuideStep(
+                number: '1',
+                title: '分享班级码给学生',
+                description: '打开"班级码"页面，让学生扫码或输入6位数字加入班级',
+              ),
+              SizedBox(height: AppSpacing.md),
+              _GuideStep(
+                number: '2',
+                title: '引导学生添加到主屏幕',
+                description: '学生用手机浏览器打开后，建议添加到主屏幕方便每天使用',
+              ),
+              SizedBox(height: AppSpacing.md),
+              _GuideStep(
+                number: '3',
+                title: '每天提醒学生打卡',
+                description: '建议在班级群发送提醒，如：\n"同学们，别忘了在晴晴上记录今天的心情哦！"',
+              ),
+              SizedBox(height: AppSpacing.md),
+              _GuideStep(
+                number: '4',
+                title: '查看班级情绪',
+                description: '在首页查看今日概况和预警，关注连续情绪低落的学生',
+              ),
+              SizedBox(height: AppSpacing.md),
+              _GuideStep(
+                number: '5',
+                title: '导出数据',
+                description: '点击首页的下载按钮，可以导出班级情绪数据',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleLogout(BuildContext context, WidgetRef ref) async {
     // Capture service reference before any async gaps
     final service = ref.read(supabaseServiceProvider);
@@ -237,5 +312,69 @@ class TeacherSettingsScreen extends ConsumerWidget {
         }
       }
     }
+  }
+}
+
+class _GuideStep extends StatelessWidget {
+  final String number;
+  final String title;
+  final String description;
+
+  const _GuideStep({
+    required this.number,
+    required this.title,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: const BoxDecoration(
+            color: AppColors.primary,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: AppColors.white,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

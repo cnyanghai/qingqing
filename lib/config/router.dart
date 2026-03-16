@@ -19,6 +19,8 @@ import '../screens/teacher/student_list_screen.dart';
 import '../screens/teacher/student_detail_screen.dart';
 import '../screens/teacher/class_code_screen.dart';
 import '../screens/teacher/settings_screen.dart';
+import '../screens/privacy_screen.dart';
+import '../screens/terms_screen.dart';
 
 /// Global navigation key
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -57,6 +59,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+
+      // Privacy policy
+      GoRoute(
+        path: '/privacy',
+        builder: (context, state) => const PrivacyScreen(),
+      ),
+
+      // Terms of service
+      GoRoute(
+        path: '/terms',
+        builder: (context, state) => const TermsScreen(),
       ),
 
       // S2: Join class
