@@ -13,6 +13,7 @@ import '../../providers/checkin_provider.dart';
 import '../../providers/learning_provider.dart';
 import '../../providers/social_provider.dart';
 import '../../widgets/avatar_picker.dart';
+import '../../models/emotion.dart';
 import '../../widgets/streak_badge.dart';
 import '../../widgets/add_learning_dialog.dart';
 
@@ -210,7 +211,7 @@ class HomeScreen extends ConsumerWidget {
                   Text(
                     hasCheckedIn
                         ? (latestCheckin != null
-                            ? _getEmotionEmoji(latestCheckin.emotionLabel)
+                            ? EmotionData.getEmojis(latestCheckin.emotionLabel)
                             : '\u{1F60A}')
                         : '\u{1F60A}',
                     style: const TextStyle(fontSize: 48),
@@ -345,7 +346,7 @@ class HomeScreen extends ConsumerWidget {
                     child: Center(
                       child: dayCheckins.length == 1
                           ? Text(
-                              _getEmotionEmoji(dayCheckins.first.emotionLabel),
+                              EmotionData.getEmojis(dayCheckins.first.emotionLabel),
                               style: const TextStyle(fontSize: 20),
                             )
                           : dayCheckins.length >= 2
@@ -993,37 +994,4 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  String _getEmotionEmoji(String label) {
-    // Look up emoji by emotion label
-    final emotion =
-        _emotionEmojiMap[label];
-    return emotion ?? '\u{1F60A}';
-  }
-
-  static const _emotionEmojiMap = {
-    '生气': '\u{1F624}',
-    '焦虑': '\u{1F630}',
-    '烦躁': '\u{1F620}',
-    '压力大': '\u{1F62B}',
-    '不耐烦': '\u{1F612}',
-    '委屈': '\u{1F616}',
-    '开心': '\u{1F604}',
-    '兴奋': '\u{1F929}',
-    '自豪': '\u{1F60A}',
-    '激动': '\u{1F973}',
-    '期待': '\u{1F601}',
-    '有信心': '\u{1F4AA}',
-    '平静': '\u{1F60C}',
-    '感激': '\u{1F64F}',
-    '满足': '\u{1F60A}',
-    '放松': '\u{1F9D8}',
-    '温暖': '\u{2600}\u{FE0F}',
-    '安全': '\u{1F6E1}\u{FE0F}',
-    '难过': '\u{1F622}',
-    '失落': '\u{1F614}',
-    '孤单': '\u{1F61E}',
-    '疲惫': '\u{1F629}',
-    '无聊': '\u{1F636}',
-    '想家': '\u{1F97A}',
-  };
 }

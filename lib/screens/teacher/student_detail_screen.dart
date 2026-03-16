@@ -456,7 +456,8 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
             children: checkins.asMap().entries.map((entry) {
               final index = entry.key;
               final checkin = entry.value;
-              final emotion = EmotionData.findEmotionByLabel(checkin.emotionLabel);
+              final emojis = EmotionData.getEmojis(checkin.emotionLabel);
+              final displayText = EmotionData.getDisplayText(checkin.emotionLabel);
               final contextLabel = EmotionData.contextLabel(checkin.contextTag);
 
               // Extract time from created_at
@@ -480,7 +481,7 @@ class _StudentDetailScreenState extends ConsumerState<StudentDetailScreen> {
                   if (timeStr.isNotEmpty)
                     const SizedBox(height: 4),
                   Text(
-                    '${emotion?.emoji ?? ""} ${checkin.emotionLabel}',
+                    '$emojis $displayText',
                     style: const TextStyle(fontSize: 18),
                   ),
                   const SizedBox(height: 4),

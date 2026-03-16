@@ -255,7 +255,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               ...checkins.asMap().entries.map((entry) {
                 final index = entry.key;
                 final checkin = entry.value;
-                final emotion = EmotionData.findEmotionByLabel(checkin.emotionLabel);
+                final emojis = EmotionData.getEmojis(checkin.emotionLabel);
+                final displayText = EmotionData.getDisplayText(checkin.emotionLabel);
                 final contextOption = EmotionData.contextOptions
                     .where((c) => c.key == checkin.contextTag)
                     .toList();
@@ -302,12 +303,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                           ),
                         ),
                         const SizedBox(width: AppSpacing.sm),
-                        Text(
-                          '${emotion?.emoji ?? ""} ${checkin.emotionLabel}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textDark,
+                        Expanded(
+                          child: Text(
+                            '$emojis $displayText',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark,
+                            ),
                           ),
                         ),
                       ],

@@ -114,6 +114,32 @@ class EmotionData {
     return null;
   }
 
+  /// Parse a comma-separated emotionLabel into individual labels.
+  /// Handles both single-label (old data) and multi-label (new data).
+  static List<String> parseLabels(String emotionLabel) {
+    return emotionLabel
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  /// Get combined emojis for a (possibly comma-separated) emotionLabel.
+  static String getEmojis(String emotionLabel) {
+    final labels = parseLabels(emotionLabel);
+    return labels
+        .map((l) => findEmotionByLabel(l)?.emoji ?? '')
+        .where((e) => e.isNotEmpty)
+        .join('');
+  }
+
+  /// Get display text for a (possibly comma-separated) emotionLabel,
+  /// joining multiple labels with Chinese comma.
+  static String getDisplayText(String emotionLabel) {
+    final labels = parseLabels(emotionLabel);
+    return labels.join('\u3001');
+  }
+
   /// Context/scene options
   static const List<ContextOption> contextOptions = [
     ContextOption(key: 'school', label: '学校', icon: '\u{1F393}'),

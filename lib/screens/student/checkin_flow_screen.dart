@@ -33,7 +33,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
   String? _selectedQuadrant;
 
   // Step 2 state
-  String? _selectedEmotion;
+  final Set<String> _selectedEmotions = {};
 
   // Step 3 state
   String? _selectedContext;
@@ -79,7 +79,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
 
   Future<void> _submitCheckin() async {
     if (_selectedQuadrant == null ||
-        _selectedEmotion == null ||
+        _selectedEmotions.isEmpty ||
         _selectedContext == null) return;
 
     setState(() => _isSubmitting = true);
@@ -96,7 +96,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
         studentId: userId,
         classroomId: profile.classroomId ?? '',
         quadrant: _selectedQuadrant!,
-        emotionLabel: _selectedEmotion!,
+        emotionLabel: _selectedEmotions.join(','),
         contextTag: _selectedContext!,
         note: _noteController.text.isNotEmpty
             ? _noteController.text.trim()
@@ -241,7 +241,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                   onSelect: (key) {
                     setState(() {
                       _selectedQuadrant = key;
-                      _selectedEmotion = null; // Reset emotion on quadrant change
+                      _selectedEmotions.clear(); // Reset emotions on quadrant change
                     });
                   },
                 ),
@@ -381,10 +381,15 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                     return EmotionChip(
                       emotion: emotion,
                       quadrantKey: _selectedQuadrant!,
-                      isSelected: _selectedEmotion == emotion.label,
+                      isSelected: _selectedEmotions.contains(emotion.label),
                       onTap: () {
-                        setState(
-                            () => _selectedEmotion = emotion.label);
+                        setState(() {
+                          if (_selectedEmotions.contains(emotion.label)) {
+                            _selectedEmotions.remove(emotion.label);
+                          } else {
+                            _selectedEmotions.add(emotion.label);
+                          }
+                        });
                       },
                     );
                   },
@@ -400,7 +405,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
             width: double.infinity,
             height: 52,
             child: ElevatedButton(
-              onPressed: _selectedEmotion != null ? _nextPage : null,
+              onPressed: _selectedEmotions.isNotEmpty ? _nextPage : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 disabledBackgroundColor:
@@ -617,6 +622,11 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
     final flowerConfig = GardenConfig.getFlower(_selectedQuadrant ?? '');
     final flowerEmoji = flowerConfig?.emoji ?? '\u{1F33B}';
     final flowerName = flowerConfig?.name ?? '花';
+    final emotionEmojis = _selectedEmotions
+        .map((l) => EmotionData.findEmotionByLabel(l)?.emoji ?? '')
+        .where((e) => e.isNotEmpty)
+        .join('');
+    final emotionText = _selectedEmotions.join('\u3001');
 
     return Container(
       width: double.infinity,
@@ -674,6 +684,17 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
               color: AppColors.textDark,
             ),
           ),
+          if (emotionText.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              '$emotionEmojis $emotionText',
+              style: const TextStyle(
+                fontSize: 16,
+                color: AppColors.textDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: AppSpacing.sm),
           Text(
             '你的花园里现在有$_resultTotalFlowers朵花了',
