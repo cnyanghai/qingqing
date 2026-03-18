@@ -9,6 +9,7 @@ class Profile {
   final int longestStreak;
   final int totalCheckins;
   final int points;
+  final int sunshine;
   final DateTime? createdAt;
 
   const Profile({
@@ -21,6 +22,7 @@ class Profile {
     this.longestStreak = 0,
     this.totalCheckins = 0,
     this.points = 0,
+    this.sunshine = 0,
     this.createdAt,
   });
 
@@ -35,6 +37,7 @@ class Profile {
       longestStreak: json['longest_streak'] as int? ?? 0,
       totalCheckins: json['total_checkins'] as int? ?? 0,
       points: json['points'] as int? ?? 0,
+      sunshine: json['sunshine'] as int? ?? 0,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
           : null,
@@ -52,6 +55,7 @@ class Profile {
       'longest_streak': longestStreak,
       'total_checkins': totalCheckins,
       'points': points,
+      'sunshine': sunshine,
     };
   }
 
@@ -65,6 +69,7 @@ class Profile {
     int? longestStreak,
     int? totalCheckins,
     int? points,
+    int? sunshine,
     DateTime? createdAt,
   }) {
     return Profile(
@@ -77,6 +82,7 @@ class Profile {
       longestStreak: longestStreak ?? this.longestStreak,
       totalCheckins: totalCheckins ?? this.totalCheckins,
       points: points ?? this.points,
+      sunshine: sunshine ?? this.sunshine,
       createdAt: createdAt ?? this.createdAt,
     );
   }

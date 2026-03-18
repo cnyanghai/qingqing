@@ -1,76 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lottie/lottie.dart';
 import '../../config/theme.dart';
-import '../../models/garden.dart';
-import '../../models/learning_entry.dart';
-import '../../models/profile.dart';
-import '../../models/student_message.dart';
+import '../../models/plant_catalog.dart';
+import '../../models/player_plant.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
-import '../../providers/checkin_provider.dart';
-import '../../providers/learning_provider.dart';
-import '../../providers/social_provider.dart';
-import '../../services/garden_service.dart';
-import '../../widgets/add_learning_dialog.dart';
-import '../../widgets/avatar_picker.dart';
-import '../../widgets/learning_label.dart';
-import '../../widgets/plant_pot.dart';
-import '../../widgets/plant_widget.dart';
-import '../../widgets/sunshine_particle.dart';
+import '../../providers/plant_provider.dart';
 
-/// Garden state Provider (unchanged)
-final gardenStateProvider = FutureProvider<GardenState>((ref) async {
-  final userId = ref.watch(currentUserIdProvider);
-  if (userId == null) return GardenState.empty;
-
-  final profile = await ref.watch(profileProvider.future);
-  if (profile == null) return GardenState.empty;
-
-  final service = ref.watch(supabaseServiceProvider);
-
-  try {
-    final notesCount = await service.countCheckinNotes(userId);
-    final distinctQuadrants = await service.getDistinctQuadrants(userId);
-
-    final semesterCheckins =
-        await ref.watch(semesterCheckinsProvider.future);
-
-    final distinctContexts =
-        semesterCheckins.map((c) => c.contextTag).toSet().length;
-
-    final dayQuadrants = <String, Set<String>>{};
-    for (final c in semesterCheckins) {
-      final dayKey =
-          '${c.checkedAt.year}-${c.checkedAt.month}-${c.checkedAt.day}';
-      dayQuadrants.putIfAbsent(dayKey, () => {}).add(c.quadrant);
-    }
-    int maxSameDayQuadrants = 0;
-    for (final qs in dayQuadrants.values) {
-      if (qs.length > maxSameDayQuadrants) {
-        maxSameDayQuadrants = qs.length;
-      }
-    }
-
-    return GardenService.calculateState(
-      totalCheckins: profile.totalCheckins,
-      streak: profile.streak,
-      notesCount: notesCount,
-      distinctQuadrants: distinctQuadrants.length,
-      recentCheckins: semesterCheckins,
-      distinctContexts: distinctContexts,
-      maxSameDayQuadrants: maxSameDayQuadrants,
-    );
-  } catch (_) {
-    return GardenState.empty;
-  }
-});
-
-// ============================================================
-// Main Garden Screen with Garden + Bookshelf tabs
-// ============================================================
-
+/// Terrarium 风格植物养成花园
 class GardenScreen extends ConsumerStatefulWidget {
   const GardenScreen({super.key});
 
@@ -78,174 +16,311 @@ class GardenScreen extends ConsumerStatefulWidget {
   ConsumerState<GardenScreen> createState() => _GardenScreenState();
 }
 
-class _GardenScreenState extends ConsumerState<GardenScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+class _GardenScreenState extends ConsumerState<GardenScreen> {
+  // 每株植物今天的点击收益次数（key=plantId）
+  final Map<String, int> _tapCounts = {};
 
   @override
   Widget build(BuildContext context) {
-    final gardenAsync = ref.watch(gardenStateProvider);
-    final allEntries =
-        ref.watch(myLearningEntriesProvider).valueOrNull ?? [];
-    final totalWaterCount =
-        ref.watch(myTotalWaterCountProvider).valueOrNull ?? 0;
-    final myMessages =
-        ref.watch(myMessagesProvider).valueOrNull ?? [];
-    final classmates =
-        ref.watch(classmatesProvider).valueOrNull ?? [];
-    final userId = ref.watch(currentUserIdProvider);
-    final profile = ref.watch(profileProvider).valueOrNull;
+    final plantsAsync = ref.watch(myPlantsProvider);
+    final sunshine = ref.watch(sunshineProvider);
+    final level = ref.watch(playerLevelProvider);
+    final progress = ref.watch(levelProgressProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: gardenAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => const Center(child: Text('\u52A0\u8F7D\u82B1\u56ED\u5931\u8D25')),
-          data: (garden) {
-            // Build unified plant list
-            final plants = _buildPlantList(garden, allEntries);
-            final sunshine = GardenService.calculateSunshine(
-              totalCheckins: profile?.totalCheckins ?? 0,
-              currentStreak: profile?.streak ?? 0,
-              totalLearningEntries: allEntries.length,
-              totalWaterReceived: totalWaterCount,
-            );
-            final gardenLevelName =
-                GardenService.gardenLevelName(sunshine);
+      body: Column(
+        children: [
+          // 顶栏
+          _TopBar(sunshine: sunshine, level: level, progress: progress),
+          // 花园场景
+          Expanded(
+            child: plantsAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (_, __) => const Center(
+                child: Text(
+                  '\u52A0\u8F7D\u82B1\u56ED\u5931\u8D25',
+                  style: TextStyle(color: AppColors.error),
+                ),
+              ),
+              data: (plants) => _GardenScene(
+                plants: plants,
+                level: level,
+                onPlantTap: _handlePlantTap,
+                onEmptySlotTap: _handleEmptySlotTap,
+              ),
+            ),
+          ),
+          // 底部面板
+          _BottomPanel(
+            sunshine: sunshine,
+            level: level,
+            plants: plantsAsync.valueOrNull ?? [],
+            onPlant: _handlePlantNew,
+            onUpgrade: _handleUpgrade,
+          ),
+        ],
+      ),
+    );
+  }
 
-            return Column(
-              children: [
-                // TabBar
-                Container(
-                  color: AppColors.white,
-                  child: TabBar(
-                    controller: _tabController,
-                    labelColor: AppColors.primary,
-                    unselectedLabelColor: AppColors.textSecondary,
-                    indicatorColor: AppColors.primary,
-                    indicatorWeight: 2.5,
-                    tabs: const [
-                      Tab(text: '\u{1F338} \u82B1\u56ED'),
-                      Tab(text: '\u{1F4DA} \u4E66\u67B6'),
-                    ],
-                  ),
-                ),
-                // TabBarView fills remaining space
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      // Garden Tab: full terrarium scene
-                      _GardenTabContent(
-                        garden: garden,
-                        plants: plants,
-                        sunshine: sunshine,
-                        gardenLevelName: gardenLevelName,
-                        totalWaterCount: totalWaterCount,
-                        allEntries: allEntries,
-                        messages: myMessages,
-                        classmates: classmates,
-                        userId: userId,
-                        onDeleteMessage: _deleteMyMessage,
+  void _handlePlantTap(PlayerPlant plant) {
+    final todayCount = _tapCounts[plant.id] ?? 0;
+    if (todayCount >= 3) {
+      // 达到上限
+      _showFloatingText(
+        '\u4ECA\u5929\u5DF2\u6536\u83B7', // 今天已收获
+        Colors.grey,
+      );
+      return;
+    }
+    // 增加阳光+1
+    _tapCounts[plant.id] = todayCount + 1;
+    final userId = ref.read(currentUserIdProvider);
+    final sunshine = ref.read(sunshineProvider);
+    if (userId != null) {
+      final service = ref.read(supabaseServiceProvider);
+      service.updateSunshine(userId, sunshine + 1).then((_) {
+        ref.invalidate(profileProvider);
+      });
+    }
+    _showFloatingText('+1\u2600\uFE0F', const Color(0xFFFF9F43)); // +1☀️
+  }
+
+  void _showFloatingText(String text, Color color) {
+    if (!mounted) return;
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (ctx) => _FloatingText(
+        text: text,
+        color: color,
+        onDone: () => entry.remove(),
+      ),
+    );
+    overlay.insert(entry);
+  }
+
+  void _handleEmptySlotTap(int shelfIndex, int slotIndex) {
+    // 弹出品种选择
+    _showPlantCatalogSheet(
+      targetShelf: shelfIndex,
+      targetSlot: slotIndex,
+    );
+  }
+
+  void _handlePlantNew(PlantSpecies species) {
+    final level = ref.read(playerLevelProvider);
+    final sunshine = ref.read(sunshineProvider);
+    final plants = ref.read(myPlantsProvider).valueOrNull ?? [];
+
+    // 检查是否已种过
+    final alreadyPlanted = plants.any((p) => p.plantKey == species.key);
+    if (alreadyPlanted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('\u8FD9\u4E2A\u54C1\u79CD\u5DF2\u7ECF\u79CD\u8FC7\u4E86')),
+      );
+      return;
+    }
+
+    if (level < species.unlockLevel) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('\u9700\u8981\u7B49\u7EA7${species.unlockLevel}\u624D\u80FD\u89E3\u9501')),
+      );
+      return;
+    }
+
+    if (sunshine < species.plantCost) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('\u9633\u5149\u4E0D\u8DB3')),
+      );
+      return;
+    }
+
+    // 弹出选位Dialog
+    _showSlotPickerDialog(species);
+  }
+
+  void _showSlotPickerDialog(PlantSpecies species) {
+    final playerLevel = ref.read(playerLevelProvider);
+    final plants = ref.read(myPlantsProvider).valueOrNull ?? [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.large),
+        ),
+        title: Text('\u9009\u62E9\u79CD\u690D\u4F4D\u7F6E - ${species.name}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: ShelfConfig.shelves
+                .where((s) => playerLevel >= s.unlockLevel)
+                .map((shelf) {
+              return _SlotPickerRow(
+                shelf: shelf,
+                plants: plants,
+                onSlotTap: (shelfIdx, slotIdx) {
+                  Navigator.of(ctx).pop();
+                  _doPlant(species, shelfIdx, slotIdx);
+                },
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('\u53D6\u6D88'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPlantCatalogSheet({
+    required int targetShelf,
+    required int targetSlot,
+  }) {
+    final playerLevel = ref.read(playerLevelProvider);
+    final sunshine = ref.read(sunshineProvider);
+    final plants = ref.read(myPlantsProvider).valueOrNull ?? [];
+
+    // 找到可种植的品种（未种过 + 已解锁）
+    final available = PlantCatalog.species.where((s) {
+      final alreadyPlanted = plants.any((p) => p.plantKey == s.key);
+      return !alreadyPlanted && playerLevel >= s.unlockLevel;
+    }).toList();
+
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('\u6CA1\u6709\u53EF\u79CD\u690D\u7684\u54C1\u79CD')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.large)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '\u9009\u62E9\u690D\u7269\u54C1\u79CD',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            ...available.map((species) {
+              final canAfford = sunshine >= species.plantCost;
+              return ListTile(
+                leading: Text(species.emoji, style: const TextStyle(fontSize: 28)),
+                title: Text(species.name),
+                subtitle: Text(species.description),
+                trailing: canAfford
+                    ? FilledButton(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          _doPlant(species, targetShelf, targetSlot);
+                        },
+                        child: species.plantCost > 0
+                            ? Text('\u2600\uFE0F${species.plantCost}')
+                            : const Text('\u514D\u8D39'),
+                      )
+                    : Text(
+                        '\u2600\uFE0F${species.plantCost}',
+                        style: const TextStyle(color: AppColors.textHint),
                       ),
-                      // Bookshelf Tab (unchanged)
-                      _BookshelfTabContent(entries: allEntries),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
+              );
+            }),
+          ],
         ),
       ),
     );
   }
 
-  /// Build the unified plant list from emotion checkins + learning entries.
-  List<PlantData> _buildPlantList(
-      GardenState garden, List<LearningEntry> entries) {
-    final plants = <PlantData>[];
+  Future<void> _doPlant(
+      PlantSpecies species, int shelfIndex, int slotIndex) async {
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) return;
 
-    // Emotion plants: one per quadrant that has checkins
-    for (final entry in garden.quadrantCounts.entries) {
-      final quadrant = entry.key;
-      final count = entry.value;
-      if (count <= 0) continue;
-
-      // Use the quadrant's Chinese name as the label
-      final quadrantNames = {
-        'red': '\u6709\u70B9\u70E6',
-        'yellow': '\u5F88\u5F00\u5FC3',
-        'green': '\u5F88\u5E73\u9759',
-        'blue': '\u4E0D\u592A\u597D',
-      };
-
-      plants.add(PlantData(
-        type: 'emotion',
-        quadrant: quadrant,
-        emotionLabel: quadrantNames[quadrant],
-        growthCount: count,
-      ));
-
-      // If many checkins in one quadrant, add extra flowers
-      if (count >= 8) {
-        plants.add(PlantData(
-          type: 'emotion',
-          quadrant: quadrant,
-          emotionLabel: quadrantNames[quadrant],
-          growthCount: (count / 2).floor(),
-        ));
+    final sunshine = ref.read(sunshineProvider);
+    if (sunshine < species.plantCost) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('\u9633\u5149\u4E0D\u8DB3')),
+        );
       }
+      return;
     }
 
-    // Learning plants: one per in-progress or completed entry
-    for (final entry in entries) {
-      // Growth count based on progress for learning entries
-      final growthCount = _learningGrowthCount(entry.progress);
-      plants.add(PlantData(
-        type: 'learning',
-        category: entry.category,
-        title: entry.title,
-        growthCount: growthCount,
-        progress: entry.progress,
-        isCompleted: entry.status == 'completed',
-      ));
-    }
-
-    return plants;
-  }
-
-  /// Map learning progress (0-100) to growth count thresholds.
-  int _learningGrowthCount(int progress) {
-    if (progress >= 90) return 30; // fruit
-    if (progress >= 60) return 14; // bloom
-    if (progress >= 40) return 7; // bud
-    if (progress >= 20) return 3; // sprout
-    return 1; // seed
-  }
-
-  Future<void> _deleteMyMessage(String messageId) async {
     try {
       final service = ref.read(supabaseServiceProvider);
-      await service.deleteMessage(messageId);
-      ref.invalidate(myMessagesProvider);
+      // 扣除阳光
+      if (species.plantCost > 0) {
+        await service.updateSunshine(userId, sunshine - species.plantCost);
+      }
+      // 创建植物
+      await service.plantNew(userId, species.key, shelfIndex, slotIndex);
+      // 刷新
+      ref.invalidate(profileProvider);
+      ref.invalidate(myPlantsProvider);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('\u5220\u9664\u7559\u8A00\u5931\u8D25: $e')),
+          SnackBar(content: Text('\u79CD\u690D\u5931\u8D25: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleUpgrade(PlayerPlant plant) async {
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) return;
+
+    final species = PlantCatalog.findByKey(plant.plantKey);
+    if (species == null) return;
+
+    if (plant.level >= 5) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('\u5DF2\u8FBE\u6700\u9AD8\u7B49\u7EA7')),
+        );
+      }
+      return;
+    }
+
+    final cost = species.upgradeCosts[plant.level]; // cost to go from current to next
+    final sunshine = ref.read(sunshineProvider);
+    if (sunshine < cost) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('\u9633\u5149\u4E0D\u8DB3')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final service = ref.read(supabaseServiceProvider);
+      await service.updateSunshine(userId, sunshine - cost);
+      await service.upgradePlant(plant.id, plant.level + 1);
+      ref.invalidate(profileProvider);
+      ref.invalidate(myPlantsProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('\u5347\u7EA7\u5931\u8D25: $e')),
         );
       }
     }
@@ -253,1555 +328,435 @@ class _GardenScreenState extends ConsumerState<GardenScreen>
 }
 
 // ============================================================
-// Garden Tab: Full Terrarium Scene
+// 顶栏
 // ============================================================
 
-class _GardenTabContent extends StatefulWidget {
-  final GardenState garden;
-  final List<PlantData> plants;
+class _TopBar extends StatelessWidget {
   final int sunshine;
-  final String gardenLevelName;
-  final int totalWaterCount;
-  final List<LearningEntry> allEntries;
-  final List<StudentMessage> messages;
-  final List<Profile> classmates;
-  final String? userId;
-  final Future<void> Function(String) onDeleteMessage;
+  final int level;
+  final double progress;
 
-  const _GardenTabContent({
-    required this.garden,
-    required this.plants,
+  const _TopBar({
     required this.sunshine,
-    required this.gardenLevelName,
-    required this.totalWaterCount,
-    required this.allEntries,
-    required this.messages,
-    required this.classmates,
-    required this.userId,
-    required this.onDeleteMessage,
+    required this.level,
+    required this.progress,
   });
 
   @override
-  State<_GardenTabContent> createState() => _GardenTabContentState();
-}
-
-class _GardenTabContentState extends State<_GardenTabContent> {
-  // Track which plant was tapped for bounce animation
-  int? _tappedPlantIndex;
-  OverlayEntry? _infoBubble;
-
-  @override
-  void dispose() {
-    _infoBubble?.remove();
-    super.dispose();
-  }
-
-  /// Number of shelves based on total checkins.
-  int get _shelfCount {
-    final total = widget.garden.totalFlowers;
-    if (total >= 50) return 3;
-    if (total >= 20) return 2;
-    return 1;
-  }
-
-  /// Slots per shelf.
-  int get _slotsPerShelf => 4;
-
-  @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Garden scene (scrollable, fills most space)
-        Expanded(
-          child: SingleChildScrollView(
-            child: _buildGardenScene(context),
-          ),
-        ),
-        // Bottom sunshine info bar
-        _buildSunshineBar(context),
-      ],
-    );
-  }
-
-  Widget _buildGardenScene(BuildContext context) {
-    final shelves = _shelfCount;
-
     return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: [0.0, 0.55, 0.56, 1.0],
-          colors: [
-            Color(0xFFE8F4FD), // light blue sky top
-            Color(0xFFF0F8FF), // lighter sky bottom
-            Color(0xFFFAF8F5), // beige wall top
-            Color(0xFFF5F0E8), // warmer beige wall bottom
-          ],
-        ),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 8,
+        left: AppSpacing.md,
+        right: AppSpacing.md,
+        bottom: 8,
       ),
-      child: Column(
-        children: [
-          // Title bar
-          _buildTitleBar(context),
-          const SizedBox(height: 8),
-          // Shelves (top to bottom: shelf 3 if exists, shelf 2 if exists, shelf 1)
-          for (int shelfIdx = shelves - 1; shelfIdx >= 0; shelfIdx--)
-            _buildShelf(context, shelfIdx),
-          // Wisdom tree area (bottom grass)
-          _buildWisdomTreeArea(),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTitleBar(BuildContext context) {
-    final messageCount = widget.messages.length;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Row(
-        children: [
-          // Garden level name
-          Text(
-            widget.gardenLevelName,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textDark,
-            ),
-          ),
-          const Spacer(),
-          // Water count badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(AppRadius.round),
-            ),
-            child: Text(
-              '\u{1F4A7} ${widget.totalWaterCount}',
-              style: const TextStyle(fontSize: 12, color: AppColors.primary),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Message icon + badge
-          GestureDetector(
-            onTap: () => _showMessageSheet(context),
-            child: Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.8),
-                shape: BoxShape.circle,
-              ),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.mail_outline, size: 20, color: AppColors.primary),
-                  if (messageCount > 0)
-                    Positioned(
-                      top: -5,
-                      right: -5,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                          color: AppColors.error,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                        child: Text(
-                          messageCount > 99 ? '99+' : '$messageCount',
-                          style: const TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.white,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildShelf(BuildContext context, int shelfIndex) {
-    // Calculate which plants go on this shelf
-    final startIdx = shelfIndex * _slotsPerShelf;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Plant area on the shelf
-        SizedBox(
-          height: 80,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: List.generate(_slotsPerShelf, (slotIdx) {
-              final plantIdx = startIdx + slotIdx;
-              if (plantIdx < widget.plants.length) {
-                return _buildPlantSlot(context, plantIdx);
-              }
-              return PlantPot(
-                child: null,
-                onEmptyTap: () {
-                  // Could navigate to checkin or add learning
-                },
-              );
-            }),
-          ),
-        ),
-        // Wooden shelf board
-        _buildShelfBoard(),
-      ],
-    );
-  }
-
-  Widget _buildPlantSlot(BuildContext context, int plantIdx) {
-    final plant = widget.plants[plantIdx];
-    final stage = stageFromCount(plant.growthCount);
-    final isTapped = _tappedPlantIndex == plantIdx;
-
-    // Build the plant widget
-    Widget plantWidget;
-    if (plant.type == 'emotion') {
-      final colors = EmotionPlantColors.forQuadrant(plant.quadrant ?? 'green');
-      plantWidget = PlantWidget(
-        config: PlantConfig(
-          type: PlantType.emotion,
-          stage: stage,
-          primaryColor: colors[0],
-          secondaryColor: colors[1],
-        ),
-      );
-    } else {
-      final colors = LearningPlantColors.forCategory(plant.category);
-      plantWidget = PlantWidget(
-        config: PlantConfig(
-          type: PlantType.learning,
-          stage: stage,
-          primaryColor: colors[0],
-          secondaryColor: colors[1],
-          learningCategory: plant.category,
-        ),
-      );
-    }
-
-    // Wrap with particles for bud+ stages
-    Widget plantWithParticles;
-    if (stage == PlantStage.bloom || stage == PlantStage.fruit) {
-      plantWithParticles = Stack(
-        alignment: Alignment.topCenter,
-        clipBehavior: Clip.none,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 24),
-            child: plantWidget,
-          ),
-          Positioned(
-            top: 0,
-            child: SunshineParticleEmitter(
-              intervalSeconds: stage == PlantStage.fruit ? 2.0 : 3.0,
-              emitWidth: 16,
-            ),
-          ),
-        ],
-      );
-    } else if (stage == PlantStage.bud) {
-      plantWithParticles = Stack(
-        alignment: Alignment.topCenter,
-        clipBehavior: Clip.none,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 24),
-            child: plantWidget,
-          ),
-          Positioned(
-            top: 0,
-            child: SunshineParticleEmitter(
-              intervalSeconds: 6.0,
-              emitWidth: 12,
-            ),
-          ),
-        ],
-      );
-    } else {
-      plantWithParticles = plantWidget;
-    }
-
-    return GestureDetector(
-      onTap: () => _onPlantTap(context, plantIdx, plant),
-      child: AnimatedScale(
-        scale: isTapped ? 1.15 : 1.0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.elasticOut,
-        child: PlantPot(
-          child: plantWithParticles,
-        ),
-      ),
-    );
-  }
-
-  void _onPlantTap(BuildContext context, int plantIdx, PlantData plant) {
-    setState(() => _tappedPlantIndex = plantIdx);
-
-    // Reset bounce after animation completes
-    Future.delayed(const Duration(milliseconds: 350), () {
-      if (mounted) {
-        setState(() {
-          if (_tappedPlantIndex == plantIdx) {
-            _tappedPlantIndex = null;
-          }
-        });
-      }
-    });
-
-    // Show info bubble
-    _showInfoBubble(context, plant);
-  }
-
-  void _showInfoBubble(BuildContext context, PlantData plant) {
-    // Remove existing bubble
-    _infoBubble?.remove();
-    _infoBubble = null;
-
-    final stage = stageFromCount(plant.growthCount);
-    final stageNames = {
-      PlantStage.seed: '\u79CD\u5B50',
-      PlantStage.sprout: '\u53D1\u82BD',
-      PlantStage.bud: '\u82B1\u82DE',
-      PlantStage.bloom: '\u76DB\u5F00',
-      PlantStage.fruit: '\u7ED3\u679C',
-    };
-
-    String line1;
-    String line2;
-
-    if (plant.type == 'emotion') {
-      final quadrantEmojis = {
-        'red': '\u{1F624}',
-        'yellow': '\u{1F604}',
-        'green': '\u{1F60C}',
-        'blue': '\u{1F622}',
-      };
-      line1 =
-          '${quadrantEmojis[plant.quadrant] ?? ''} ${plant.emotionLabel ?? ''}';
-      line2 =
-          '\u7B2C${plant.growthCount}\u6B21 \u00B7 ${stageNames[stage] ?? ''}';
-    } else {
-      line1 = '\u{1F4D6} ${plant.title ?? ''}';
-      line2 = '\u8FDB\u5EA6 ${plant.progress}%';
-    }
-
-    final overlay = Overlay.of(context);
-    _infoBubble = OverlayEntry(
-      builder: (ctx) => _InfoBubbleOverlay(
-        line1: line1,
-        line2: line2,
-        onDismiss: () {
-          _infoBubble?.remove();
-          _infoBubble = null;
-        },
-      ),
-    );
-    overlay.insert(_infoBubble!);
-
-    // Auto-dismiss after 2 seconds
-    Future.delayed(const Duration(seconds: 2), () {
-      _infoBubble?.remove();
-      _infoBubble = null;
-    });
-  }
-
-  /// Wooden shelf board with shadow.
-  Widget _buildShelfBoard() {
-    return Container(
-      width: double.infinity,
-      height: 8,
-      margin: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
-        color: const Color(0xFFD4A574), // warm wood color
-        borderRadius: BorderRadius.circular(2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x30000000),
-            blurRadius: 4,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Wisdom tree at the bottom (Lottie + grass).
-  Widget _buildWisdomTreeArea() {
-    // Collect learning labels for the tree canopy
-    final displayEntries = widget.allEntries.take(8).toList();
-
-    return Container(
-      width: double.infinity,
-      height: 180,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFF5F0E8), // match wall
-            Color(0xFFD5E8C0), // grass transition
-            Color(0xFF8BC34A), // grass green
-          ],
-          stops: [0.0, 0.7, 1.0],
-        ),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Lottie wisdom tree
-          Positioned(
-            bottom: 0,
-            child: SizedBox(
-              height: 160,
-              width: 200,
-              child: Lottie.asset(
-                'assets/animations/virtues_tree.json',
-                fit: BoxFit.contain,
-                repeat: true,
-              ),
-            ),
-          ),
-          // Learning labels float in the tree canopy
-          ..._buildTreeLabels(displayEntries),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildTreeLabels(List<LearningEntry> entries) {
-    if (entries.isEmpty) return [];
-
-    final labels = <Widget>[];
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    for (int i = 0; i < entries.length; i++) {
-      final entry = entries[i];
-      final isCompleted = entry.status == 'completed';
-
-      final xRatio = 0.1 + (i * 0.618033988 % 0.8);
-      final yRatio = 0.05 + (i * 0.381966 % 0.4);
-
-      labels.add(Positioned(
-        left: xRatio * screenWidth * 0.8,
-        top: yRatio * 100,
-        child: LearningLabel(
-          title: entry.title,
-          category: entry.category,
-          isCompleted: isCompleted,
-        ),
-      ));
-    }
-    return labels;
-  }
-
-  /// Bottom info bar with sunshine value + plant stats.
-  Widget _buildSunshineBar(BuildContext context) {
-    // Count plants by stage
-    int seedCount = 0, sproutCount = 0, budCount = 0, bloomCount = 0,
-        fruitCount = 0;
-    for (final p in widget.plants) {
-      final stage = stageFromCount(p.growthCount);
-      switch (stage) {
-        case PlantStage.seed:
-          seedCount++;
-        case PlantStage.sprout:
-          sproutCount++;
-        case PlantStage.bud:
-          budCount++;
-        case PlantStage.bloom:
-          bloomCount++;
-        case PlantStage.fruit:
-          fruitCount++;
-      }
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.white,
+        color: Colors.white.withValues(alpha: 0.85),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 6,
-            offset: const Offset(0, -2),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
-          // Sunshine value
+          // 设置图标
+          GestureDetector(
+            onTap: () => context.go('/profile'),
+            child: const Icon(Icons.settings, color: AppColors.textSecondary, size: 24),
+          ),
+          const Spacer(),
+          // 阳光值
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('\u{2600}\u{FE0F}',
-                  style: TextStyle(fontSize: 16)),
+              const Text('\u2600\uFE0F', style: TextStyle(fontSize: 18)),
               const SizedBox(width: 4),
               Text(
-                '${widget.sunshine}',
+                _formatNumber(sunshine),
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFFF8F00),
+                  color: AppColors.textDark,
                 ),
               ),
             ],
           ),
-          const SizedBox(width: 12),
-          Container(width: 1, height: 18, color: AppColors.divider),
-          const SizedBox(width: 12),
-          // Plant stats
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  if (seedCount > 0)
-                    _statChip('\u{1F331}', seedCount),
-                  if (sproutCount > 0)
-                    _statChip('\u{1F33F}', sproutCount),
-                  if (budCount > 0)
-                    _statChip('\u{1F33E}', budCount),
-                  if (bloomCount > 0)
-                    _statChip('\u{1F338}', bloomCount),
-                  if (fruitCount > 0)
-                    _statChip('\u{1F34E}', fruitCount),
-                  if (widget.plants.isEmpty)
-                    const Text(
-                      '\u8FD8\u6CA1\u6709\u690D\u7269',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statChip(String emoji, int count) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Text(
-        '$emoji\u00D7$count',
-        style: const TextStyle(fontSize: 13, color: AppColors.textDark),
-      ),
-    );
-  }
-
-  // ============================================================
-  // Message Sheet (preserved from original)
-  // ============================================================
-
-  void _showMessageSheet(BuildContext context) {
-    final messages = widget.messages;
-    final classmates = widget.classmates;
-    final userId = widget.userId;
-
-    final displayMessages =
-        messages.length > 10 ? messages.sublist(0, 10) : messages;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.3,
-        maxChildSize: 0.8,
-        expand: false,
-        builder: (_, scrollController) => SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
-                  children: [
-                    Text(
-                      '\u{1F4DD} \u7559\u8A00 \u00B7 ${messages.length}\u6761',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => Navigator.of(ctx).pop(),
-                      child: const Icon(
-                        Icons.close,
-                        color: AppColors.textHint,
-                        size: 22,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: displayMessages.isEmpty
-                    ? const Center(
-                        child: Text(
-                          '\u8FD8\u6CA1\u6709\u6536\u5230\u7559\u8A00',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        itemCount: displayMessages.length,
-                        itemBuilder: (_, index) {
-                          final msg = displayMessages[index];
-                          final author = classmates
-                              .where((c) => c.id == msg.authorId)
-                              .firstOrNull;
-                          final authorName = author?.nickname ?? '\u540C\u5B66';
-                          final authorAvatarKey = author?.avatarKey ?? 'cat';
-                          final timeStr = _formatMessageTime(msg.createdAt);
-                          final canDelete = userId != null &&
-                              msg.targetStudentId == userId;
-
-                          return Container(
-                            margin:
-                                const EdgeInsets.only(bottom: AppSpacing.sm),
-                            padding: const EdgeInsets.all(AppSpacing.sm),
-                            decoration: BoxDecoration(
-                              color: AppColors.white,
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.medium),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.03),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                AvatarCircle(
-                                  avatarKey: authorAvatarKey,
-                                  size: 32,
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            authorName,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.textDark,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          Text(
-                                            timeStr,
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: AppColors.textHint,
-                                            ),
-                                          ),
-                                          if (canDelete)
-                                            GestureDetector(
-                                              onTap: () async {
-                                                Navigator.of(ctx).pop();
-                                                await widget
-                                                    .onDeleteMessage(msg.id);
-                                              },
-                                              child: const Padding(
-                                                padding:
-                                                    EdgeInsets.only(left: 4),
-                                                child: Icon(
-                                                  Icons.close,
-                                                  size: 16,
-                                                  color: AppColors.textHint,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        msg.content,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: AppColors.textDark,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatMessageTime(DateTime? dateTime) {
-    if (dateTime == null) return '';
-    final now = DateTime.now();
-    final diff = now.difference(dateTime);
-
-    if (diff.inMinutes < 1) return '\u521A\u521A';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}\u5206\u949F\u524D';
-    if (diff.inHours < 24) return '${diff.inHours}\u5C0F\u65F6\u524D';
-    if (diff.inDays < 7) return '${diff.inDays}\u5929\u524D';
-
-    return '${dateTime.month}/${dateTime.day}';
-  }
-}
-
-// ============================================================
-// Info Bubble Overlay (shows on plant tap)
-// ============================================================
-
-class _InfoBubbleOverlay extends StatefulWidget {
-  final String line1;
-  final String line2;
-  final VoidCallback onDismiss;
-
-  const _InfoBubbleOverlay({
-    required this.line1,
-    required this.line2,
-    required this.onDismiss,
-  });
-
-  @override
-  State<_InfoBubbleOverlay> createState() => _InfoBubbleOverlayState();
-}
-
-class _InfoBubbleOverlayState extends State<_InfoBubbleOverlay>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
-    );
-    _fadeController.forward();
-
-    // Start fade out before dismiss
-    Future.delayed(const Duration(milliseconds: 1600), () {
-      if (mounted) {
-        _fadeController.reverse().then((_) {
-          widget.onDismiss();
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _fadeController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: MediaQuery.of(context).size.height * 0.3,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.line1,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.line2,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// Bookshelf Tab (preserved from original, unchanged)
-// ============================================================
-
-class _BookshelfTabContent extends ConsumerStatefulWidget {
-  final List<LearningEntry> entries;
-
-  const _BookshelfTabContent({required this.entries});
-
-  @override
-  ConsumerState<_BookshelfTabContent> createState() =>
-      _BookshelfTabContentState();
-}
-
-class _BookshelfTabContentState extends ConsumerState<_BookshelfTabContent> {
-  bool _showCompletedBooks = false;
-  bool _showMasteredSkills = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final inProgressBooks = widget.entries
-        .where((e) => e.type == 'book' && e.status == 'in_progress')
-        .toList();
-    final completedBooks = widget.entries
-        .where((e) => e.type == 'book' && e.status == 'completed')
-        .toList();
-    final inProgressSkills = widget.entries
-        .where((e) => e.type == 'skill' && e.status == 'in_progress')
-        .toList();
-    final completedSkills = widget.entries
-        .where((e) => e.type == 'skill' && e.status == 'completed')
-        .toList();
-
-    final classLearningAsync = ref.watch(classmateLearningProvider);
-    final classLearning = classLearningAsync.valueOrNull;
-    final classmatesAsync = ref.watch(classmatesProvider);
-    final classmates = classmatesAsync.valueOrNull ?? [];
-    final currentUserId = ref.watch(currentUserIdProvider) ?? '';
-
-    return Stack(
-      children: [
-        ListView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          children: [
-            _buildSectionHeader(
-              '\u{1F4D6} \u5728\u8BFB',
-              count: inProgressBooks.length,
-            ),
-            if (inProgressBooks.isEmpty)
-              _buildEmptyHint('\u8FD8\u6CA1\u6709\u5728\u8BFB\u7684\u4E66')
-            else
-              ...inProgressBooks.map((book) => _buildBookItem(
-                    book,
-                    classLearning,
-                    classmates,
-                    currentUserId,
-                  )),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            _buildCollapsibleHeader(
-              '\u{1F4D5} \u5DF2\u8BFB\u5B8C',
-              count: completedBooks.length,
-              isExpanded: _showCompletedBooks,
-              onTap: () =>
-                  setState(() => _showCompletedBooks = !_showCompletedBooks),
-            ),
-            if (_showCompletedBooks)
-              ...completedBooks.map((book) => _buildCompletedBookItem(book)),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            _buildSectionHeader(
-              '\u{1F3AF} \u6280\u80FD',
-              count: inProgressSkills.length,
-            ),
-            if (inProgressSkills.isEmpty)
-              _buildEmptyHint('\u8FD8\u6CA1\u6709\u5728\u5B66\u7684\u6280\u80FD')
-            else
-              ...inProgressSkills.map((skill) => _buildSkillItem(skill)),
-
-            const SizedBox(height: AppSpacing.lg),
-
-            _buildCollapsibleHeader(
-              '\u{1F3C6} \u5DF2\u638C\u63E1',
-              count: completedSkills.length,
-              isExpanded: _showMasteredSkills,
-              onTap: () =>
-                  setState(() => _showMasteredSkills = !_showMasteredSkills),
-            ),
-            if (_showMasteredSkills)
-              ...completedSkills.map((skill) => _buildCompletedSkillItem(skill)),
-
-            const SizedBox(height: 80),
-          ],
-        ),
-
-        Positioned(
-          right: AppSpacing.md,
-          bottom: AppSpacing.md,
-          child: FloatingActionButton(
-            onPressed: () => _showAddOptions(context),
-            backgroundColor: AppColors.primary,
-            child: const Icon(Icons.add, color: AppColors.white),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionHeader(String title, {required int count}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Text(
-        '$title ($count)',
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textDark,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCollapsibleHeader(
-    String title, {
-    required int count,
-    required bool isExpanded,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-        child: Row(
-          children: [
-            Text(
-              '$title ($count)',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textDark,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              isExpanded
-                  ? Icons.keyboard_arrow_up
-                  : Icons.keyboard_arrow_down,
-              size: 20,
-              color: AppColors.textSecondary,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyHint(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-      child: Center(
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontSize: 14,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBookItem(
-    LearningEntry book,
-    List<LearningEntry>? classLearning,
-    List<Profile> classmates,
-    String currentUserId,
-  ) {
-    int readingCircleCount = 0;
-    if (classLearning != null) {
-      final bookTitleNorm = book.title.trim().toLowerCase();
-      readingCircleCount = classLearning
-          .where((e) =>
-              e.type == 'book' &&
-              e.status == 'in_progress' &&
-              e.title.trim().toLowerCase() == bookTitleNorm &&
-              e.studentId != currentUserId)
-          .map((e) => e.studentId)
-          .toSet()
-          .length;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.medium),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  book.title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textDark,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: book.progress / 100.0,
-                          backgroundColor: AppColors.divider,
-                          color: AppColors.primary,
-                          minHeight: 8,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      '${book.progress}%',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (readingCircleCount > 0)
-            GestureDetector(
-              onTap: () => _showReadingCircleDialog(
-                  book, classLearning!, classmates, currentUserId),
-              child: Container(
-                margin: const EdgeInsets.only(left: AppSpacing.sm),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.moodBlueBg,
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                ),
-                child: Text(
-                  '\u{1F465}$readingCircleCount\u4EBA\u5728\u8BFB',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-            ),
-          _buildPopupMenu(book, isBook: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompletedBookItem(LearningEntry book) {
-    final completedDate = book.completedAt != null
-        ? '${book.completedAt!.month}/${book.completedAt!.day}'
-        : '';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.medium),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              book.title,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textDark,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.moodGreenBg,
-              borderRadius: BorderRadius.circular(AppRadius.small),
-            ),
-            child: const Text(
-              '\u5DF2\u8BFB\u5B8C',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.moodGreen,
-              ),
-            ),
-          ),
-          if (completedDate.isNotEmpty) ...[
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              completedDate,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSkillItem(LearningEntry skill) {
-    final config = LearningCategories.getCategory(skill.category);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.medium),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Text(config.emoji, style: const TextStyle(fontSize: 20)),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  skill.title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textDark,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: skill.progress / 100.0,
-                          backgroundColor: AppColors.divider,
-                          color: config.color,
-                          minHeight: 6,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      '${skill.progress}%',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: config.color,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          _buildPopupMenu(skill, isBook: false),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompletedSkillItem(LearningEntry skill) {
-    final config = LearningCategories.getCategory(skill.category);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.medium),
-      ),
-      child: Row(
-        children: [
-          Text(config.emoji, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              skill.title,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textDark,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.moodGreenBg,
-              borderRadius: BorderRadius.circular(AppRadius.small),
-            ),
-            child: const Text(
-              '\u5DF2\u638C\u63E1',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.moodGreen,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPopupMenu(LearningEntry entry, {required bool isBook}) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: AppColors.textHint, size: 20),
-      onSelected: (value) =>
-          _handleMenuAction(value, entry, isBook: isBook),
-      itemBuilder: (context) => [
-        const PopupMenuItem(
-          value: 'update_progress',
-          child: Text('\u66F4\u65B0\u8FDB\u5EA6'),
-        ),
-        PopupMenuItem(
-          value: 'complete',
-          child: Text(isBook
-              ? '\u6807\u8BB0\u5B8C\u6210'
-              : '\u6807\u8BB0\u638C\u63E1'),
-        ),
-        const PopupMenuItem(
-          value: 'delete',
-          child: Text('\u5220\u9664',
-              style: TextStyle(color: AppColors.error)),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _handleMenuAction(String action, LearningEntry entry,
-      {required bool isBook}) async {
-    final service = ref.read(supabaseServiceProvider);
-
-    switch (action) {
-      case 'update_progress':
-        final newProgress = await _showProgressDialog(entry.progress);
-        if (newProgress != null && mounted) {
-          try {
-            await service.updateLearningEntry(
-              entry.id,
-              {'progress': newProgress},
-            );
-            ref.invalidate(myLearningEntriesProvider);
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('\u66F4\u65B0\u5931\u8D25: $e')),
-              );
-            }
-          }
-        }
-        break;
-
-      case 'complete':
-        try {
-          final now = DateTime.now();
-          final dateStr =
-              '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-          await service.updateLearningEntry(entry.id, {
-            'status': 'completed',
-            'progress': 100,
-            'completed_at': dateStr,
-          });
-          ref.invalidate(myLearningEntriesProvider);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  isBook
-                      ? '\u{1F389} \u606D\u559C\u8BFB\u5B8C\u300A${entry.title}\u300B!'
-                      : '\u{1F389} \u606D\u559C\u638C\u63E1\u300C${entry.title}\u300D!',
-                ),
-              ),
-            );
-          }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('\u64CD\u4F5C\u5931\u8D25: $e')),
-            );
-          }
-        }
-        break;
-
-      case 'delete':
-        final confirmed = await _showDeleteConfirmation(entry.title);
-        if (confirmed == true && mounted) {
-          try {
-            await service.deleteLearningEntry(entry.id);
-            ref.invalidate(myLearningEntriesProvider);
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('\u5220\u9664\u5931\u8D25: $e')),
-              );
-            }
-          }
-        }
-        break;
-    }
-  }
-
-  Future<int?> _showProgressDialog(int currentProgress) {
-    double sliderValue = currentProgress.toDouble();
-    return showDialog<int>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.large),
-          ),
-          title: const Text('\u66F4\u65B0\u8FDB\u5EA6'),
-          content: Column(
+          const Spacer(),
+          // 等级 + 进度条
+          Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${sliderValue.toInt()}%',
+                'Lv.$level',
                 style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-              ),
-              Slider(
-                value: sliderValue,
-                min: 0,
-                max: 100,
-                divisions: 20,
-                label: '${sliderValue.toInt()}%',
-                onChanged: (v) => setDialogState(() => sliderValue = v),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('\u53D6\u6D88'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(sliderValue.toInt()),
-              child: const Text('\u786E\u8BA4'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<bool?> _showDeleteConfirmation(String title) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.large),
-        ),
-        title: const Text('\u786E\u8BA4\u5220\u9664'),
-        content: Text('\u786E\u5B9A\u8981\u5220\u9664\u300C$title\u300D\u5417\uFF1F'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('\u53D6\u6D88'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('\u5220\u9664'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showReadingCircleDialog(
-    LearningEntry book,
-    List<LearningEntry> classLearning,
-    List<Profile> classmates,
-    String currentUserId,
-  ) {
-    final bookTitleNorm = book.title.trim().toLowerCase();
-    final readers = classLearning
-        .where((e) =>
-            e.type == 'book' &&
-            e.status == 'in_progress' &&
-            e.title.trim().toLowerCase() == bookTitleNorm &&
-            e.studentId != currentUserId)
-        .toList();
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '\u{1F4DA} \u6B63\u5728\u8BFB\u300A${book.title}\u300B\u7684\u540C\u5B66',
-                style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textDark,
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              ...readers.map((entry) {
-                final classmate = classmates
-                    .where((c) => c.id == entry.studentId)
-                    .firstOrNull;
-                if (classmate == null) return const SizedBox.shrink();
-                return ListTile(
-                  leading: AvatarCircle(
-                    avatarKey: classmate.avatarKey,
-                    size: 36,
+              const SizedBox(height: 2),
+              SizedBox(
+                width: 60,
+                height: 6,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: AppColors.divider,
+                    color: AppColors.primary,
+                    minHeight: 6,
                   ),
-                  title: Text(classmate.nickname),
-                  trailing: SizedBox(
-                    width: 100,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: entry.progress / 100.0,
-                              backgroundColor: AppColors.divider,
-                              color: AppColors.primary,
-                              minHeight: 6,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${entry.progress}%',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatNumber(int n) {
+    if (n >= 1000) {
+      return '${(n / 1000).toStringAsFixed(1)}k';
+    }
+    return n.toString();
+  }
+}
+
+// ============================================================
+// 花园场景
+// ============================================================
+
+class _GardenScene extends StatelessWidget {
+  final List<PlayerPlant> plants;
+  final int level;
+  final void Function(PlayerPlant) onPlantTap;
+  final void Function(int shelfIndex, int slotIndex) onEmptySlotTap;
+
+  const _GardenScene({
+    required this.plants,
+    required this.level,
+    required this.onPlantTap,
+    required this.onEmptySlotTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 架子从上到下排列: 高等级(index 3)在上, 初始(index 0)在下
+    final shelvesReversed = ShelfConfig.shelves.reversed.toList();
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFB3E5FC), // 天蓝
+            Color(0xFF81D4FA), // 深天蓝
+          ],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // 云朵装饰
+          const Positioned(top: 20, left: 30, child: _Cloud(width: 80)),
+          const Positioned(top: 50, right: 20, child: _Cloud(width: 60)),
+          const Positioned(top: 100, left: 120, child: _Cloud(width: 50)),
+          // 架子列表
+          SingleChildScrollView(
+            padding: const EdgeInsets.only(top: 20, bottom: 20),
+            child: Column(
+              children: [
+                for (final shelf in shelvesReversed) ...[
+                  const SizedBox(height: 16),
+                  _ShelfWidget(
+                    shelfIndex: shelf.index,
+                    slots: shelf.slots,
+                    plants: plants
+                        .where((p) => p.shelfIndex == shelf.index)
+                        .toList(),
+                    isLocked: level < shelf.unlockLevel,
+                    unlockLevel: shelf.unlockLevel,
+                    onPlantTap: onPlantTap,
+                    onEmptySlotTap: onEmptySlotTap,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 云朵
+// ============================================================
+
+class _Cloud extends StatelessWidget {
+  final double width;
+
+  const _Cloud({required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: width * 0.4,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(width * 0.2),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 架子 Widget
+// ============================================================
+
+class _ShelfWidget extends StatelessWidget {
+  final int shelfIndex;
+  final int slots;
+  final List<PlayerPlant> plants;
+  final bool isLocked;
+  final int unlockLevel;
+  final void Function(PlayerPlant) onPlantTap;
+  final void Function(int, int) onEmptySlotTap;
+
+  const _ShelfWidget({
+    required this.shelfIndex,
+    required this.slots,
+    required this.plants,
+    required this.isLocked,
+    required this.unlockLevel,
+    required this.onPlantTap,
+    required this.onEmptySlotTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLocked) {
+      return _buildLockedShelf();
+    }
+    return _buildUnlockedShelf();
+  }
+
+  Widget _buildLockedShelf() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      child: Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            height: 110,
+            decoration: BoxDecoration(
+              color: const Color(0xFF90CAF9).withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+            ),
+          ),
+          // 木质架子横板
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _WoodPlank(),
+          ),
+          // 锁定遮罩
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF64B5F6).withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    '\uD83D\uDD12', // 🔒
+                    style: TextStyle(fontSize: 28),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '\u7B49\u7EA7$unlockLevel\u89E3\u9501', // 等级X解锁
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
                     ),
                   ),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    context.push('/classmates/${classmate.id}');
-                  },
-                );
-              }),
-              const SizedBox(height: AppSpacing.md),
-              const Text(
-                '\u4E00\u8D77\u8BFB\u4E66\uFF0C\u4E00\u8D77\u6210\u957F \u{1F4D6}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnlockedShelf() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 植物行
+          SizedBox(
+            height: 100,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (int i = 0; i < slots; i++)
+                  _buildSlot(i),
+              ],
+            ),
+          ),
+          // 木质架子横板
+          _WoodPlank(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlot(int slotIndex) {
+    final plant = plants.where((p) => p.slotIndex == slotIndex).firstOrNull;
+    if (plant != null) {
+      return _PlantSlot(plant: plant, onTap: () => onPlantTap(plant));
+    }
+    return _EmptySlot(onTap: () => onEmptySlotTap(shelfIndex, slotIndex));
+  }
+}
+
+// ============================================================
+// 木质架子横板
+// ============================================================
+
+class _WoodPlank extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 10,
+      margin: const EdgeInsets.symmetric(horizontal: 0),
+      decoration: const BoxDecoration(
+        color: Color(0xFF8D6E63),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0xFF6D4C41),
+            offset: Offset(0, 2),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 植物位
+// ============================================================
+
+class _PlantSlot extends StatefulWidget {
+  final PlayerPlant plant;
+  final VoidCallback onTap;
+
+  const _PlantSlot({required this.plant, required this.onTap});
+
+  @override
+  State<_PlantSlot> createState() => _PlantSlotState();
+}
+
+class _PlantSlotState extends State<_PlantSlot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _bounceController;
+  late Animation<double> _bounceAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _bounceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _bounceAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.12),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.12, end: 1.0),
+        weight: 60,
+      ),
+    ]).animate(CurvedAnimation(
+      parent: _bounceController,
+      curve: Curves.easeOutBack,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _bounceController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final species = PlantCatalog.findByKey(widget.plant.plantKey);
+
+    return GestureDetector(
+      onTap: () {
+        widget.onTap();
+        _bounceController.forward(from: 0);
+      },
+      child: AnimatedBuilder(
+        animation: _bounceAnimation,
+        builder: (ctx, child) {
+          return Transform.scale(
+            scale: _bounceAnimation.value,
+            child: child,
+          );
+        },
+        child: SizedBox(
+          width: 80,
+          height: 90,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // 植物图片
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: species != null
+                    ? Image.asset(
+                        species.stageImagePath(widget.plant.level),
+                        width: 70,
+                        height: 70,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) =>
+                            _PlaceholderPlant(
+                              level: widget.plant.level,
+                              emoji: species.emoji,
+                            ),
+                      )
+                    : _PlaceholderPlant(
+                        level: widget.plant.level,
+                        emoji: '\uD83C\uDF31',
+                      ),
+              ),
+              const SizedBox(height: 2),
+              // 等级文字
+              Text(
+                'Lv.${widget.plant.level}',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
                 ),
               ),
             ],
@@ -1810,45 +765,517 @@ class _BookshelfTabContentState extends ConsumerState<_BookshelfTabContent> {
       ),
     );
   }
+}
 
-  void _showAddOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+// ============================================================
+// Placeholder 植物（没有图片时）
+// ============================================================
+
+class _PlaceholderPlant extends StatelessWidget {
+  final int level;
+  final String emoji;
+
+  const _PlaceholderPlant({required this.level, required this.emoji});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: BoxDecoration(
+        color: const Color(0xFF81C784).withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(12),
       ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Text('\u{1F4D6}',
-                    style: TextStyle(fontSize: 24)),
-                title: const Text('\u6DFB\u52A0\u4E66\u7C4D'),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  showDialog(
-                    context: context,
-                    builder: (_) => const AddLearningDialog(type: 'book'),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Text('\u{1F3AF}',
-                    style: TextStyle(fontSize: 24)),
-                title: const Text('\u6DFB\u52A0\u6280\u80FD'),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  showDialog(
-                    context: context,
-                    builder: (_) => const AddLearningDialog(type: 'skill'),
-                  );
-                },
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 28)),
+          const SizedBox(height: 2),
+          Text(
+            'Lv.$level',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 空位
+// ============================================================
+
+class _EmptySlot extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _EmptySlot({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.arrow_downward, color: Colors.white60, size: 20),
+            SizedBox(height: 4),
+            Icon(Icons.local_florist_outlined, color: Colors.white60, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 飘动文字（+1☀️）
+// ============================================================
+
+class _FloatingText extends StatefulWidget {
+  final String text;
+  final Color color;
+  final VoidCallback onDone;
+
+  const _FloatingText({
+    required this.text,
+    required this.color,
+    required this.onDone,
+  });
+
+  @override
+  State<_FloatingText> createState() => _FloatingTextState();
+}
+
+class _FloatingTextState extends State<_FloatingText>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnim;
+  late Animation<double> _offsetAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    );
+    _opacityAnim = Tween(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+    _offsetAnim = Tween(begin: 0.0, end: -60.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+    _controller.forward().then((_) => widget.onDone());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    return Positioned(
+      left: size.width / 2 - 30,
+      top: size.height / 2,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (ctx, child) {
+          return Transform.translate(
+            offset: Offset(0, _offsetAnim.value),
+            child: Opacity(
+              opacity: _opacityAnim.value,
+              child: child,
+            ),
+          );
+        },
+        child: Text(
+          widget.text,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: widget.color,
+            shadows: const [
+              Shadow(
+                color: Colors.black26,
+                blurRadius: 4,
+                offset: Offset(1, 1),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 位置选择行（种植时用）
+// ============================================================
+
+class _SlotPickerRow extends StatelessWidget {
+  final ShelfLevel shelf;
+  final List<PlayerPlant> plants;
+  final void Function(int shelfIndex, int slotIndex) onSlotTap;
+
+  const _SlotPickerRow({
+    required this.shelf,
+    required this.plants,
+    required this.onSlotTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          child: Text(
+            '\u7B2C${shelf.index + 1}\u5C42\u67B6\u5B50', // 第N层架子
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        Row(
+          children: [
+            for (int i = 0; i < shelf.slots; i++)
+              Builder(builder: (ctx) {
+                final occupied = plants.any(
+                    (p) => p.shelfIndex == shelf.index && p.slotIndex == i);
+                return Padding(
+                  padding: const EdgeInsets.only(right: AppSpacing.sm),
+                  child: GestureDetector(
+                    onTap: occupied
+                        ? null
+                        : () => onSlotTap(shelf.index, i),
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: occupied
+                            ? AppColors.divider
+                            : const Color(0xFFE3F2FD),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: occupied
+                              ? AppColors.textHint
+                              : AppColors.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Center(
+                        child: occupied
+                            ? const Icon(Icons.local_florist,
+                                color: AppColors.textHint, size: 20)
+                            : const Icon(Icons.add,
+                                color: AppColors.primary, size: 20),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+      ],
+    );
+  }
+}
+
+// ============================================================
+// 底部面板
+// ============================================================
+
+class _BottomPanel extends StatelessWidget {
+  final int sunshine;
+  final int level;
+  final List<PlayerPlant> plants;
+  final void Function(PlantSpecies) onPlant;
+  final Future<void> Function(PlayerPlant) onUpgrade;
+
+  const _BottomPanel({
+    required this.sunshine,
+    required this.level,
+    required this.plants,
+    required this.onPlant,
+    required this.onUpgrade,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.large),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Tab头
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            child: const Row(
+              children: [
+                Text(
+                  '\uD83C\uDF31 \u690D\u7269\u56FE\u9274', // 🌱 植物图鉴
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                Spacer(),
+                Text(
+                  '\uD83C\uDF08 \u4E3B\u9898(\u9884\u7559)', // 🌈 主题(预留)
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textHint,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // 植物列表
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              itemCount: PlantCatalog.species.length,
+              itemBuilder: (ctx, index) {
+                final species = PlantCatalog.species[index];
+                return _PlantCatalogRow(
+                  species: species,
+                  playerLevel: level,
+                  sunshine: sunshine,
+                  existingPlant: plants
+                      .where((p) => p.plantKey == species.key)
+                      .firstOrNull,
+                  onPlant: () => onPlant(species),
+                  onUpgrade: onUpgrade,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// 植物图鉴行
+// ============================================================
+
+class _PlantCatalogRow extends StatelessWidget {
+  final PlantSpecies species;
+  final int playerLevel;
+  final int sunshine;
+  final PlayerPlant? existingPlant;
+  final VoidCallback onPlant;
+  final Future<void> Function(PlayerPlant) onUpgrade;
+
+  const _PlantCatalogRow({
+    required this.species,
+    required this.playerLevel,
+    required this.sunshine,
+    required this.existingPlant,
+    required this.onPlant,
+    required this.onUpgrade,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isUnlocked = playerLevel >= species.unlockLevel;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          vertical: AppSpacing.sm, horizontal: AppSpacing.sm),
+      child: Row(
+        children: [
+          // 缩略图
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 50,
+              height: 50,
+              child: _buildThumbnail(),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          // 名称+状态
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  species.name,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isUnlocked
+                        ? AppColors.textDark
+                        : AppColors.textHint,
+                  ),
+                ),
+                Text(
+                  _statusText(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 操作按钮
+          _buildActionButton(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThumbnail() {
+    if (species.key == 'violet') {
+      final level = existingPlant?.level ?? 1;
+      return Image.asset(
+        species.stageImagePath(level),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _emojiThumbnail(),
+      );
+    }
+    return _emojiThumbnail();
+  }
+
+  Widget _emojiThumbnail() {
+    return Container(
+      color: const Color(0xFFE8F5E9),
+      child: Center(
+        child: Text(species.emoji, style: const TextStyle(fontSize: 24)),
+      ),
+    );
+  }
+
+  String _statusText() {
+    if (existingPlant != null) {
+      return 'Level ${existingPlant!.level}  \u2600\uFE0F${species.productionPerSec}/s';
+    }
+    if (playerLevel >= species.unlockLevel) {
+      return '\u79CD\u5B50'; // 种子
+    }
+    return '\u672A\u89E3\u9501'; // 未解锁
+  }
+
+  Widget _buildActionButton() {
+    if (existingPlant != null) {
+      // 已种植
+      if (existingPlant!.level >= 5) {
+        return _grayButton('\u6EE1\u7EA7'); // 满级
+      }
+      final cost = species.upgradeCosts[existingPlant!.level];
+      final canAfford = sunshine >= cost;
+      return _actionButton(
+        label: '\u5347\u7EA7', // 升级
+        cost: cost,
+        color: canAfford ? AppColors.success : AppColors.divider,
+        textColor: canAfford ? Colors.white : AppColors.textHint,
+        onTap: canAfford ? () => onUpgrade(existingPlant!) : null,
+      );
+    }
+
+    if (playerLevel < species.unlockLevel) {
+      return _grayButton('Lv.${species.unlockLevel} \uD83D\uDD12');
+    }
+
+    final canAfford = sunshine >= species.plantCost;
+    return _actionButton(
+      label: '\u79CD\u690D', // 种植
+      cost: species.plantCost,
+      color: canAfford ? AppColors.primary : AppColors.divider,
+      textColor: canAfford ? Colors.white : AppColors.textHint,
+      onTap: canAfford ? onPlant : null,
+    );
+  }
+
+  Widget _grayButton(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.divider,
+        borderRadius: BorderRadius.circular(AppRadius.small),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          color: AppColors.textHint,
+        ),
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required int cost,
+    required Color color,
+    required Color textColor,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(AppRadius.small),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+            if (cost > 0)
+              Text(
+                '\u2600\uFE0F$cost',
+                style: TextStyle(fontSize: 10, color: textColor),
+              ),
+          ],
         ),
       ),
     );

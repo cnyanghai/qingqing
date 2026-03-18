@@ -7,6 +7,7 @@ import '../models/badge.dart';
 import '../models/learning_entry.dart';
 import '../models/water_record.dart';
 import '../models/student_message.dart';
+import '../models/player_plant.dart';
 
 /// Central Supabase service for all database operations
 class SupabaseService {
@@ -770,6 +771,81 @@ class SupabaseService {
       await _client.from('student_messages').delete().eq('id', messageId);
     } catch (e) {
       throw Exception('删除留言失败: $e');
+    }
+  }
+
+  // ---------- Player Plants ----------
+
+  /// 获取我的植物列表
+  Future<List<PlayerPlant>> getMyPlants(String studentId) async {
+    try {
+      final data = await _client
+          .from('player_plants')
+          .select()
+          .eq('student_id', studentId)
+          .order('shelf_index', ascending: true)
+          .order('slot_index', ascending: true);
+      return (data as List).map((e) => PlayerPlant.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('\u83B7\u53D6\u690D\u7269\u5217\u8868\u5931\u8D25: $e');
+    }
+  }
+
+  /// 种植新植物
+  Future<PlayerPlant> plantNew(
+    String studentId,
+    String plantKey,
+    int shelfIndex,
+    int slotIndex,
+  ) async {
+    try {
+      final data = await _client
+          .from('player_plants')
+          .insert({
+            'student_id': studentId,
+            'plant_key': plantKey,
+            'shelf_index': shelfIndex,
+            'slot_index': slotIndex,
+            'level': 1,
+          })
+          .select()
+          .single();
+      return PlayerPlant.fromJson(data);
+    } catch (e) {
+      throw Exception('\u79CD\u690D\u5931\u8D25: $e');
+    }
+  }
+
+  /// 升级植物
+  Future<void> upgradePlant(String plantId, int newLevel) async {
+    try {
+      await _client
+          .from('player_plants')
+          .update({'level': newLevel})
+          .eq('id', plantId);
+    } catch (e) {
+      throw Exception('\u5347\u7EA7\u690D\u7269\u5931\u8D25: $e');
+    }
+  }
+
+  /// 删除植物（移除花盆）
+  Future<void> removePlant(String plantId) async {
+    try {
+      await _client.from('player_plants').delete().eq('id', plantId);
+    } catch (e) {
+      throw Exception('\u79FB\u9664\u690D\u7269\u5931\u8D25: $e');
+    }
+  }
+
+  /// 更新阳光值
+  Future<void> updateSunshine(String studentId, int newSunshine) async {
+    try {
+      await _client
+          .from('profiles')
+          .update({'sunshine': newSunshine})
+          .eq('id', studentId);
+    } catch (e) {
+      throw Exception('\u66F4\u65B0\u9633\u5149\u503C\u5931\u8D25: $e');
     }
   }
 

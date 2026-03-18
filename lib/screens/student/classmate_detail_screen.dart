@@ -12,8 +12,6 @@ import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/social_provider.dart';
 import '../../widgets/avatar_picker.dart';
-import '../../widgets/plant_pot.dart';
-import '../../widgets/plant_widget.dart';
 
 /// 同学详情页 — 智慧树只读视图 + 浇水 + 留言板
 class ClassmateDetailScreen extends ConsumerStatefulWidget {
@@ -518,32 +516,8 @@ class _ClassmateDetailScreenState
 
   Widget _buildTreeVisualization(
       Profile profile, List<LearningEntry> entries) {
-    // Build learning plants for shelf display
-    final plants = entries.take(4).map((entry) {
-      final progress = entry.progress;
-      int growthCount;
-      if (progress >= 90) {
-        growthCount = 30;
-      } else if (progress >= 60) {
-        growthCount = 14;
-      } else if (progress >= 40) {
-        growthCount = 7;
-      } else if (progress >= 20) {
-        growthCount = 3;
-      } else {
-        growthCount = 1;
-      }
-      final colors = LearningPlantColors.forCategory(entry.category);
-      return PlantWidget(
-        config: PlantConfig(
-          type: PlantType.learning,
-          stage: stageFromCount(growthCount),
-          primaryColor: colors[0],
-          secondaryColor: colors[1],
-          learningCategory: entry.category,
-        ),
-      );
-    }).toList();
+    // 简化版: 显示学习记录的emoji列表
+    final topEntries = entries.take(4).toList();
 
     return Stack(
       alignment: Alignment.center,
@@ -573,7 +547,7 @@ class _ClassmateDetailScreenState
               borderRadius: BorderRadius.circular(AppRadius.large),
               child: Column(
                 children: [
-                  // Shelf with plants
+                  // 学习记录展示
                   SizedBox(
                     height: 90,
                     child: Row(
@@ -581,9 +555,9 @@ class _ClassmateDetailScreenState
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         for (int i = 0; i < 4; i++)
-                          i < plants.length
-                              ? PlantPot(child: plants[i])
-                              : const PlantPot(child: null),
+                          i < topEntries.length
+                              ? _buildEntryChip(topEntries[i])
+                              : const SizedBox(width: 48, height: 48),
                       ],
                     ),
                   ),
@@ -639,6 +613,27 @@ class _ClassmateDetailScreenState
               ),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildEntryChip(LearningEntry entry) {
+    final config = LearningCategories.getCategory(entry.category);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(config.emoji, style: const TextStyle(fontSize: 24)),
+        const SizedBox(height: 2),
+        SizedBox(
+          width: 50,
+          child: Text(
+            entry.title,
+            style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+        ),
       ],
     );
   }
