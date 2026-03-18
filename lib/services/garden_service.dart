@@ -220,6 +220,30 @@ class GardenService {
     );
   }
 
+  /// Calculate sunshine value (pure front-end, no DB).
+  ///
+  /// Formula: checkins*10 + learningEntries*5 + waterReceived*3 + streak*2
+  static int calculateSunshine({
+    required int totalCheckins,
+    required int currentStreak,
+    required int totalLearningEntries,
+    required int totalWaterReceived,
+  }) {
+    return totalCheckins * 10 +
+        totalLearningEntries * 5 +
+        totalWaterReceived * 3 +
+        currentStreak * 2;
+  }
+
+  /// Garden level name based on sunshine value.
+  static String gardenLevelName(int sunshine) {
+    if (sunshine >= 5000) return '\u{1F333} \u79D8\u5BC6\u82B1\u56ED';
+    if (sunshine >= 2000) return '\u{1F33A} \u7F24\u7EB7\u82B1\u56ED';
+    if (sunshine >= 500) return '\u{1F338} \u82B1\u5F00\u82B1\u56ED';
+    if (sunshine >= 100) return '\u{1F33F} \u5C0F\u82B1\u56ED';
+    return '\u{1F331} \u79CD\u5B50\u82B1\u56ED';
+  }
+
   /// 计算新解锁的装饰 key 列表
   ///
   /// 比较打卡前后的解锁状态，返回本次新解锁的装饰 key

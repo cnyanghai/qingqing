@@ -275,3 +275,44 @@ class GardenState {
     quadrantCounts: {},
   );
 }
+
+/// Unified plant data for the terrarium garden display.
+///
+/// Combines both emotion check-in flowers and learning-entry plants
+/// into a single model for shelf layout.
+class PlantData {
+  /// 'emotion' or 'learning'
+  final String type;
+
+  /// Emotion quadrant ('red', 'yellow', 'green', 'blue'). Only for emotion type.
+  final String? quadrant;
+
+  /// Learning category ('reading', 'music', 'sports', 'coding', etc.). Only for learning type.
+  final String? category;
+
+  /// Book/skill title. Only for learning type.
+  final String? title;
+
+  /// Emotion label text (e.g. "happy"). Only for emotion type.
+  final String? emotionLabel;
+
+  /// Cumulative count that determines growth stage.
+  final int growthCount;
+
+  /// Progress 0-100. Only meaningful for learning type.
+  final int progress;
+
+  /// Whether the learning entry is completed.
+  final bool isCompleted;
+
+  const PlantData({
+    required this.type,
+    this.quadrant,
+    this.category,
+    this.title,
+    this.emotionLabel,
+    required this.growthCount,
+    this.progress = 0,
+    this.isCompleted = false,
+  });
+}

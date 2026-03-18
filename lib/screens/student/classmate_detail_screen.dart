@@ -12,7 +12,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/social_provider.dart';
 import '../../widgets/avatar_picker.dart';
-import '../../widgets/learning_label.dart';
+import '../../widgets/plant_pot.dart';
+import '../../widgets/plant_widget.dart';
 
 /// 同学详情页 — 智慧树只读视图 + 浇水 + 留言板
 class ClassmateDetailScreen extends ConsumerStatefulWidget {
@@ -517,6 +518,33 @@ class _ClassmateDetailScreenState
 
   Widget _buildTreeVisualization(
       Profile profile, List<LearningEntry> entries) {
+    // Build learning plants for shelf display
+    final plants = entries.take(4).map((entry) {
+      final progress = entry.progress;
+      int growthCount;
+      if (progress >= 90) {
+        growthCount = 30;
+      } else if (progress >= 60) {
+        growthCount = 14;
+      } else if (progress >= 40) {
+        growthCount = 7;
+      } else if (progress >= 20) {
+        growthCount = 3;
+      } else {
+        growthCount = 1;
+      }
+      final colors = LearningPlantColors.forCategory(entry.category);
+      return PlantWidget(
+        config: PlantConfig(
+          type: PlantType.learning,
+          stage: stageFromCount(growthCount),
+          primaryColor: colors[0],
+          secondaryColor: colors[1],
+          learningCategory: entry.category,
+        ),
+      );
+    }).toList();
+
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -526,32 +554,64 @@ class _ClassmateDetailScreenState
           curve: Curves.elasticOut,
           child: Container(
             width: double.infinity,
-            height: 200,
+            height: 220,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.large),
               gradient: const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
+                stops: [0.0, 0.5, 0.51, 1.0],
                 colors: [
-                  Color(0xFFF5F0E8), // warm white sky
-                  Color(0xFFE8E0D0), // soft beige ground
+                  Color(0xFFE8F4FD),
+                  Color(0xFFF0F8FF),
+                  Color(0xFFFAF8F5),
+                  Color(0xFFF5F0E8),
                 ],
               ),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.large),
-              child: Stack(
+              child: Column(
                 children: [
-                  // Lottie wisdom tree
-                  Center(
+                  // Shelf with plants
+                  SizedBox(
+                    height: 90,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        for (int i = 0; i < 4; i++)
+                          i < plants.length
+                              ? PlantPot(child: plants[i])
+                              : const PlantPot(child: null),
+                      ],
+                    ),
+                  ),
+                  // Shelf board
+                  Container(
+                    width: double.infinity,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4A574),
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x30000000),
+                          blurRadius: 4,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Lottie tree in remaining space
+                  Expanded(
                     child: Lottie.asset(
                       'assets/animations/virtues_tree.json',
                       fit: BoxFit.contain,
                       repeat: true,
                     ),
                   ),
-                  // Learning labels (no emotion flowers for classmate privacy)
-                  ..._buildClassmateLearningLabels(entries),
                 ],
               ),
             ),
@@ -581,36 +641,6 @@ class _ClassmateDetailScreenState
           ),
       ],
     );
-  }
-
-  /// Build learning labels for classmate tree (same layout as garden).
-  List<Widget> _buildClassmateLearningLabels(List<LearningEntry> entries) {
-    if (entries.isEmpty) return [];
-
-    final displayEntries = entries.take(12).toList();
-    final labels = <Widget>[];
-    // Use a LayoutBuilder-safe approach: calculate from fixed container width
-    final screenWidth = MediaQuery.of(context).size.width;
-    final containerWidth = screenWidth - 2 * AppSpacing.md;
-
-    for (int i = 0; i < displayEntries.length; i++) {
-      final entry = displayEntries[i];
-      final isCompleted = entry.status == 'completed';
-
-      final xRatio = 0.1 + (i * 0.618033988 % 0.8);
-      final yRatio = 0.05 + (i * 0.381966 % 0.45);
-
-      labels.add(Positioned(
-        left: xRatio * containerWidth * 0.85,
-        top: yRatio * 180,
-        child: LearningLabel(
-          title: entry.title,
-          category: entry.category,
-          isCompleted: isCompleted,
-        ),
-      ));
-    }
-    return labels;
   }
 
   Widget _buildWaterButton(String nickname) {
