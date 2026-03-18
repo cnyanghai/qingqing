@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -674,13 +677,16 @@ class _PlantSlot extends StatefulWidget {
 }
 
 class _PlantSlotState extends State<_PlantSlot>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _bounceController;
   late Animation<double> _bounceAnimation;
+  late AnimationController _swayController;
+  late AnimationController _breathController;
 
   @override
   void initState() {
     super.initState();
+    // Bounce (existing)
     _bounceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -698,17 +704,41 @@ class _PlantSlotState extends State<_PlantSlot>
       parent: _bounceController,
       curve: Curves.easeOutBack,
     ));
+
+    // Sway (wind effect)
+    _swayController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat(reverse: true);
+
+    // Breath (micro scale)
+    _breathController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _bounceController.dispose();
+    _swayController.dispose();
+    _breathController.dispose();
     super.dispose();
+  }
+
+  double get _swayAngle {
+    final phaseOffset = widget.plant.slotIndex * 0.3;
+    return sin((_swayController.value + phaseOffset) * 2 * pi) * 0.03;
+  }
+
+  double get _breathScale {
+    return 1.0 + sin(_breathController.value * 2 * pi) * 0.015;
   }
 
   @override
   Widget build(BuildContext context) {
     final species = PlantCatalog.findByKey(widget.plant.plantKey);
+    final level = widget.plant.level;
 
     return GestureDetector(
       onTap: () {
@@ -723,48 +753,220 @@ class _PlantSlotState extends State<_PlantSlot>
             child: child,
           );
         },
-        child: SizedBox(
-          width: 80,
-          height: 90,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              // 植物图片
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: species != null
-                    ? Image.asset(
-                        species.stageImagePath(widget.plant.level),
-                        width: 70,
-                        height: 70,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) =>
-                            _PlaceholderPlant(
-                              level: widget.plant.level,
-                              emoji: species.emoji,
+        child: AnimatedBuilder(
+          animation: _breathController,
+          builder: (ctx, child) {
+            return Transform.scale(
+              scale: _breathScale,
+              child: child,
+            );
+          },
+          child: AnimatedBuilder(
+            animation: _swayController,
+            builder: (ctx, child) {
+              return Transform.rotate(
+                angle: _swayAngle,
+                alignment: Alignment.bottomCenter,
+                child: child,
+              );
+            },
+            child: SizedBox(
+              width: 80,
+              height: 90,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // Plant image with particles overlay
+                  SizedBox(
+                    width: 70,
+                    height: 70,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        // Plant image with upgrade transition
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          switchInCurve: Curves.easeOutBack,
+                          switchOutCurve: Curves.easeIn,
+                          transitionBuilder: (child, animation) {
+                            return ScaleTransition(
+                              scale: animation,
+                              child: FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: ClipRRect(
+                            key: ValueKey<int>(level),
+                            borderRadius: BorderRadius.circular(8),
+                            child: species != null
+                                ? Image.asset(
+                                    species.stageImagePath(level),
+                                    width: 70,
+                                    height: 70,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) =>
+                                        _PlaceholderPlant(
+                                          level: level,
+                                          emoji: species.emoji,
+                                        ),
+                                  )
+                                : _PlaceholderPlant(
+                                    level: level,
+                                    emoji: '\uD83C\uDF31',
+                                  ),
+                          ),
+                        ),
+                        // Sunshine particles for level >= 4
+                        if (level >= 4)
+                          Positioned.fill(
+                            child: _SunshineParticle(
+                              key: ValueKey<String>(
+                                  '${widget.plant.id}_particle'),
                             ),
-                      )
-                    : _PlaceholderPlant(
-                        level: widget.plant.level,
-                        emoji: '\uD83C\uDF31',
-                      ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  // Level text
+                  Text(
+                    'Lv.$level',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              // 等级文字
-              Text(
-                'Lv.${widget.plant.level}',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+// ============================================================
+// Sunshine particle for blooming plants (level >= 4)
+// ============================================================
+
+class _SunshineParticle extends StatefulWidget {
+  const _SunshineParticle({super.key});
+
+  @override
+  State<_SunshineParticle> createState() => _SunshineParticleState();
+}
+
+class _SunshineParticleState extends State<_SunshineParticle>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  Timer? _spawnTimer;
+  final List<_ParticleData> _particles = [];
+  int _nextId = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat();
+    _controller.addListener(_updateParticles);
+
+    // Spawn first particle immediately, then every 3 seconds
+    _spawnParticle();
+    _spawnTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _spawnParticle(),
+    );
+  }
+
+  void _spawnParticle() {
+    if (!mounted) return;
+    setState(() {
+      _particles.add(_ParticleData(
+        id: _nextId++,
+        startTime: DateTime.now(),
+        horizontalOffset: (Random().nextDouble() - 0.5) * 40, // -20 to +20
+      ));
+    });
+  }
+
+  void _updateParticles() {
+    if (!mounted) return;
+    final now = DateTime.now();
+    final changed = _particles.any(
+      (p) => now.difference(p.startTime).inMilliseconds > 2000,
+    );
+    if (changed) {
+      setState(() {
+        _particles.removeWhere(
+          (p) => now.difference(p.startTime).inMilliseconds > 2000,
+        );
+      });
+    }
+    // Trigger rebuild for smooth movement
+    if (_particles.isNotEmpty) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _spawnTimer?.cancel();
+    _controller.removeListener(_updateParticles);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    return Stack(
+      clipBehavior: Clip.none,
+      children: _particles.map((p) {
+        final elapsed = now.difference(p.startTime).inMilliseconds;
+        final progress = (elapsed / 2000.0).clamp(0.0, 1.0);
+        // Move upward by 30px from top of plant
+        final dy = -progress * 30;
+        // Horizontal sway using sin
+        final dx = sin(progress * 2 * pi) * 6 + p.horizontalOffset * progress;
+        // Fade out
+        final opacity = (1.0 - progress).clamp(0.0, 1.0);
+
+        return Positioned(
+          left: 35 + dx - 1.5, // center horizontally (70/2)
+          top: dy,
+          child: Opacity(
+            opacity: opacity,
+            child: Container(
+              width: 3,
+              height: 3,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFD54F),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _ParticleData {
+  final int id;
+  final DateTime startTime;
+  final double horizontalOffset;
+
+  const _ParticleData({
+    required this.id,
+    required this.startTime,
+    required this.horizontalOffset,
+  });
 }
 
 // ============================================================
